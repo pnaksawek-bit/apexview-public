@@ -1,0 +1,861 @@
+{
+  "contract_version": "APEXVIEW-SNAPSHOT-v1.0",
+  "semantics_version": "APEXVIEW-SEMANTICS-v1.0",
+  "read_only": true,
+  "generated_at": 1787710232,
+  "as_of": {
+    "snapshot_ts": 1787710232,
+    "market_ts": 1787319000,
+    "is_live": false
+  },
+  "stock": {
+    "ticker": "RKLB",
+    "price": 73.98,
+    "action": "WATCH",
+    "grade": "B+",
+    "market_mode": "Risk-on"
+  },
+  "logic_version": "APEX-VI-v1.6",
+  "short_horizon": null,
+  "decision_evidence": [
+    {
+      "source_table": "state.gqvs_events",
+      "source_record_key": "RKLB:1787518698#h365",
+      "decision_type": "GQVS",
+      "decision_action": "FORECAST",
+      "decision_ts": 1787518698,
+      "horizon_days": 365,
+      "outcome_status": "pending",
+      "return_pct": null,
+      "excess_return_pct": null,
+      "logic_version": "legacy"
+    }
+  ],
+  "nodes": [
+    {
+      "view_id": "tag:2fcdcec436bddc0a",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "แพงเกินโต",
+        "stable_core_id": false
+      },
+      "label": "แพงเกินโต",
+      "group": "critical",
+      "mood": "bad",
+      "polarity": "negative",
+      "critical": true,
+      "score": -7.0,
+      "reason": "valuation สูง แต่ growth/กำไรตามไม่ทัน",
+      "display": {
+        "lane": "critical",
+        "size_value": 7.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [
+        "ราคาแพงเผื่ออนาคต",
+        "ข้อมูลรายได้ยังบาง"
+      ],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:7da7548ebdd31e40",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ราคาแพงเผื่ออนาคต",
+        "stable_core_id": false
+      },
+      "label": "ราคาแพงเผื่ออนาคต",
+      "group": "valuation",
+      "mood": "bad",
+      "polarity": "negative",
+      "critical": false,
+      "score": -5.0,
+      "reason": "Valuation สูง แต่คุณภาพยังไม่พอ",
+      "display": {
+        "lane": "valuation",
+        "size_value": 5.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:2890ea2785294360",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "หลุด EMA200",
+        "stable_core_id": false
+      },
+      "label": "หลุด EMA200",
+      "group": "entry",
+      "mood": "bad",
+      "polarity": "negative",
+      "critical": false,
+      "score": -4.0,
+      "reason": "ราคาหลุด EMA200 เทรนด์ใหญ่เสีย",
+      "display": {
+        "lane": "entry",
+        "size_value": 4.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:d0a94f099ca6f94f",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "แพงกว่ากลุ่ม",
+        "stable_core_id": false
+      },
+      "label": "แพงกว่ากลุ่ม",
+      "group": "valuation",
+      "mood": "bad",
+      "polarity": "negative",
+      "critical": false,
+      "score": -3.0,
+      "reason": "มูลค่าตึงกว่าระดับที่กลุ่มธุรกิจควรรับได้",
+      "display": {
+        "lane": "valuation",
+        "size_value": 3.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:d59c13fb192beb00",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "เทรนด์เสีย",
+        "stable_core_id": false
+      },
+      "label": "เทรนด์เสีย",
+      "group": "entry",
+      "mood": "bad",
+      "polarity": "negative",
+      "critical": false,
+      "score": -3.0,
+      "reason": "ราคาหลุดแนวโน้มหลัก",
+      "display": {
+        "lane": "entry",
+        "size_value": 3.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:072eff07a078ab71",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "เสี่ยงพิสูจน์ตลาด",
+        "stable_core_id": false
+      },
+      "label": "เสี่ยงพิสูจน์ตลาด",
+      "group": "product",
+      "mood": "watch",
+      "polarity": "caution",
+      "critical": false,
+      "score": -2.0,
+      "reason": "สินค้า/เทคโนโลยียังต้องพิสูจน์ commercial adoption",
+      "display": {
+        "lane": "product",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:6b3880744d12a7f3",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ชนต้านหนา",
+        "stable_core_id": false
+      },
+      "label": "ชนต้านหนา",
+      "group": "entry",
+      "mood": "watch",
+      "polarity": "caution",
+      "critical": false,
+      "score": -2.0,
+      "reason": "ด้านบนมีโซนราคาคนติดเยอะ",
+      "display": {
+        "lane": "entry",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:808eeec65d7e2eaa",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "เสี่ยง Gap สูง",
+        "stable_core_id": false
+      },
+      "label": "เสี่ยง Gap สูง",
+      "group": "risk",
+      "mood": "watch",
+      "polarity": "caution",
+      "critical": false,
+      "score": -2.0,
+      "reason": "ราคามีประวัติกระโดดแรงรอบงบหรือข่าวสำคัญ",
+      "display": {
+        "lane": "risk",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:32e04bd5afad5daa",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "รายได้ซ้ำ",
+        "stable_core_id": false
+      },
+      "label": "รายได้ซ้ำ",
+      "group": "product",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 2.0,
+      "reason": "โมเดล subscription/platform/service repeat",
+      "display": {
+        "lane": "product",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:3a4616546e8b9ca2",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ถูกกว่ากลุ่ม",
+        "stable_core_id": false
+      },
+      "label": "ถูกกว่ากลุ่ม",
+      "group": "valuation",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 2.0,
+      "reason": "มูลค่ายังไม่ตึงเมื่อเทียบลักษณะกลุ่มธุรกิจ",
+      "display": {
+        "lane": "valuation",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:342e0c2e405e8580",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "รายได้โตจริง",
+        "stable_core_id": false
+      },
+      "label": "รายได้โตจริง",
+      "group": "growth",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 2.0,
+      "reason": "ไตรมาสล่าสุดโตจากรายได้จริง",
+      "display": {
+        "lane": "growth",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:3cd2c8a7a6beb2c3",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "หนี้เบามาก",
+        "stable_core_id": false
+      },
+      "label": "หนี้เบามาก",
+      "group": "quality",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 2.0,
+      "reason": "D/E ต่ำมาก",
+      "display": {
+        "lane": "quality",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:b687f84d77b9ad88",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "เข้าโซนไม้แรก",
+        "stable_core_id": false
+      },
+      "label": "เข้าโซนไม้แรก",
+      "group": "entry",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 2.0,
+      "reason": "ราคาใกล้จุดเข้าไม้แรก",
+      "display": {
+        "lane": "entry",
+        "size_value": 2.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:2aedb244dda3350c",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ธีมร้อน",
+        "stable_core_id": false
+      },
+      "label": "ธีมร้อน",
+      "group": "product",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 1.0,
+      "reason": "อยู่ในธีมตลาดกำลังสนใจ",
+      "display": {
+        "lane": "product",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:d7807268fd112ce2",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ขายให้องค์กรใหญ่",
+        "stable_core_id": false
+      },
+      "label": "ขายให้องค์กรใหญ่",
+      "group": "product",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 1.0,
+      "reason": "ลูกค้าหลักเป็น enterprise/government/utility",
+      "display": {
+        "lane": "product",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:11c4b8754d285a20",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "แถบมูลค่ายังรับได้",
+        "stable_core_id": false
+      },
+      "label": "แถบมูลค่ายังรับได้",
+      "group": "valuation",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 1.0,
+      "reason": "กราฟอยู่ในโซนมูลค่าที่ไม่ตึงเกินไป",
+      "display": {
+        "lane": "valuation",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:582643612c3d1e7d",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "RSI ปกติ",
+        "stable_core_id": false
+      },
+      "label": "RSI ปกติ",
+      "group": "entry",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 1.0,
+      "reason": "RSI อยู่โซนไม่ร้อน",
+      "display": {
+        "lane": "entry",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:b7e566a456acb48d",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "สภาพคล่องดี",
+        "stable_core_id": false
+      },
+      "label": "สภาพคล่องดี",
+      "group": "quality",
+      "mood": "good",
+      "polarity": "positive",
+      "critical": false,
+      "score": 1.0,
+      "reason": "Current/quick ratio ดี",
+      "display": {
+        "lane": "quality",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    },
+    {
+      "view_id": "tag:38a5b1a210099ab2",
+      "source_identity": {
+        "kind": "canonical_label",
+        "value": "ข่าวงบ",
+        "stable_core_id": false
+      },
+      "label": "ข่าวงบ",
+      "group": "news",
+      "mood": "info",
+      "polarity": "neutral",
+      "critical": false,
+      "score": 1.0,
+      "reason": "ข่าวเกี่ยวกับ earnings/revenue/guidance",
+      "display": {
+        "lane": "news",
+        "size_value": 1.0,
+        "size_source": "tag.score",
+        "distance_has_semantic_meaning": false
+      },
+      "lifecycle": {
+        "state": "active",
+        "change": "unknown",
+        "last_seen_ts": 0,
+        "expired": null,
+        "strength_change": null
+      },
+      "hidden": {
+        "is_hidden": false,
+        "state": "normal",
+        "verified": false
+      },
+      "validation": null,
+      "components": [],
+      "provenance": {
+        "tag": "existing_tag_result",
+        "state": "snapshot_membership"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "tag:7da7548ebdd31e40",
+      "target": "tag:2fcdcec436bddc0a",
+      "relationship": "declared_component",
+      "evidence_source": "tag.components",
+      "directed": true
+    }
+  ],
+  "timeline": {
+    "comparison_available": false,
+    "appeared": [],
+    "disappeared": [],
+    "strengthened": null,
+    "weakened": null,
+    "expired": null
+  },
+  "counts": {
+    "active": 19,
+    "inactive": 0,
+    "positive": 10,
+    "negative": 5,
+    "caution": 3,
+    "neutral": 1,
+    "critical": 1,
+    "hidden_candidate": 0,
+    "hidden_approved": 0,
+    "hidden_verified": 0
+  },
+  "truth_limits": {
+    "realtime_supported": false,
+    "strength_change_supported": false,
+    "expired_state_supported": false,
+    "arbitrary_relationships_supported": false
+  },
+  "warnings": [
+    "no persisted TAG snapshot",
+    "component not present in snapshot: ข้อมูลรายได้ยังบาง"
+  ],
+  "runtime_proof": {
+    "version": "APEXVIEW-RUNTIME-PROOF-v1.0",
+    "ticker_selection": "manual",
+    "gate_required": false,
+    "candidate_gate": {
+      "logic_version": "SHORT-HORIZON-v1.17",
+      "limit": 20,
+      "in_current_gate": false,
+      "rank": null,
+      "candidate_count": 0,
+      "candidate": null
+    },
+    "sources": {
+      "row": "sheet_cache.json",
+      "history": "raw_price_daily",
+      "tags": "existing static_event_tags result",
+      "critical_edges": "tag.components only",
+      "short_horizon": "horizon_ranking_rows cache",
+      "decision_evidence": "decision_evidence read-only projection"
+    },
+    "metrics": {
+      "zone": "watch",
+      "price": 73.98480224609375,
+      "support1": 81.1712836690768,
+      "support_target": 68.06601806640626,
+      "required_entry": 81.1712836690768,
+      "entry_label": "ไม้ 1",
+      "entry_distance_percent": -8.853477607033126,
+      "distance_support_percent": -8.853477607033126,
+      "distance_target_percent": 8.69565217391303
+    },
+    "checks": {
+      "runtime_row_present": true,
+      "cached_history_present": true,
+      "market_timestamp_present": true,
+      "runtime_tags_present": true,
+      "active_nodes_match_runtime_tags": true,
+      "edges_use_declared_components_only": true,
+      "manual_ticker_does_not_require_gate": true
+    },
+    "passed": true
+  }
+}

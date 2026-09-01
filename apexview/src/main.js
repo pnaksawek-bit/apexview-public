@@ -1,0 +1,1123 @@
+import * as THREE from "three";
+import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import {
+  Activity,
+  Bell,
+  BrainCircuit,
+  CalendarDays,
+  CircleHelp,
+  List,
+  Maximize2,
+  MousePointer2,
+  Network,
+  Orbit,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  ShieldCheck,
+  TriangleAlert,
+  X,
+  ZoomIn,
+  ZoomOut,
+  createIcons,
+} from "lucide";
+import "./styles.css";
+
+const SNAPSHOT_VERSION = "APEXVIEW-SNAPSHOT-v1.0";
+const UNIVERSE_VERSION = "APEXVIEW-UNIVERSE-v1.0";
+const DEFAULT_TICKER = "RKLB";
+const MAX_RENDER_TAGS = 80;
+
+const DEFAULT_MANIFEST = {
+  contract_version: UNIVERSE_VERSION,
+  read_only: true,
+  generated_at: 0,
+  source: { kind: "short_horizon_ranking", mode: "current", limit: 20 },
+  stocks: [],
+  counts: { selected: 0, exported: 0, failed: 0 },
+  failures: [],
+  test_fixtures: {
+    RKLB: {
+      snapshot_url: "/data/snapshots/RKLB.json",
+      reason: "Phase 2 runtime proof only; not a Short Horizon candidate",
+    },
+  },
+};
+
+const state = {
+  manifest: DEFAULT_MANIFEST,
+  snapshot: null,
+  ticker: DEFAULT_TICKER,
+  selectedId: "",
+  nodeObjects: new Map(),
+  backgroundObjects: [],
+  edgeObjects: [],
+  criticalEffects: [],
+  animationObjects: [],
+  raycaster: new THREE.Raycaster(),
+  pointer: new THREE.Vector2(),
+  pointerDown: null,
+  clock: new THREE.Clock(),
+  frame: 0,
+  lastLabelLayoutAt: 0,
+  cameraReady: false,
+};
+
+const $ = (selector) => document.querySelector(selector);
+
+const dom = {
+  galaxy: $("#galaxy-canvas"),
+  stage: $("#galaxy-stage"),
+  loading: $("#loading-state"),
+  loadingText: $("#loading-text"),
+  error: $("#error-state"),
+  errorText: $("#error-text"),
+  tickerSelect: $("#ticker-select"),
+  fixtureBadge: $("#fixture-badge"),
+  ticker: $("#stock-ticker"),
+  stockName: $("#stock-name"),
+  price: $("#stock-price"),
+  action: $("#stock-action"),
+  marketMode: $("#market-mode"),
+  snapshotTime: $("#snapshot-time"),
+  marketTime: $("#market-time"),
+  logicVersion: $("#logic-version"),
+  sourceContract: $("#source-contract"),
+  activeCount: $("#active-count"),
+  positiveCount: $("#positive-count"),
+  negativeCount: $("#negative-count"),
+  cautionCount: $("#caution-count"),
+  neutralCount: $("#neutral-count"),
+  criticalCount: $("#critical-count"),
+  eventCount: $("#event-count"),
+  eventList: $("#event-list"),
+  timelineStatus: $("#timeline-status"),
+  detailEmpty: $("#detail-empty"),
+  detailContent: $("#detail-content"),
+  detailMoodDot: $("#detail-mood-dot"),
+  detailGroup: $("#detail-group"),
+  detailCritical: $("#detail-critical"),
+  detailLabel: $("#detail-label"),
+  detailScore: $("#detail-score"),
+  detailReason: $("#detail-reason"),
+  detailComponents: $("#detail-components"),
+  detailChain: $("#detail-chain"),
+  detailFacts: $("#detail-facts"),
+  clock: $("#runtime-clock"),
+};
+
+let scene;
+let camera;
+let renderer;
+let labelRenderer;
+let controls;
+let galaxyRoot;
+let tagLayer;
+let edgeLayer;
+let backgroundLayer;
+let coreGroup;
+let selectedRing;
+let coreLabel;
+
+const polarityColors = {
+  positive: 0x61e6b1,
+  negative: 0xff8d7e,
+  caution: 0xf4ca7a,
+  neutral: 0xaebed0,
+};
+
+const polarityClasses = {
+  positive: "positive",
+  negative: "negative",
+  caution: "caution",
+  neutral: "neutral",
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatScore(value) {
+  const score = numberOrNull(value);
+  if (score === null) return "SCORE UNKNOWN";
+  return `${score > 0 ? "+" : ""}${score.toFixed(score % 1 === 0 ? 0 : 1)}`;
+}
+
+function formatPrice(value) {
+  const price = numberOrNull(value);
+  return price === null ? "--" : price.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function formatDate(timestamp) {
+  const value = numberOrNull(timestamp);
+  if (!value) return "ไม่ระบุ";
+  return new Intl.DateTimeFormat("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    hour12: false,
+  }).format(new Date(value * 1000));
+}
+
+function formatShortDate(timestamp) {
+  const value = numberOrNull(timestamp);
+  if (!value) return "--";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value * 1000));
+}
+
+function labelForGroup(group) {
+  const labels = {
+    core: "Core",
+    catalyst: "Catalyst",
+    safety: "Safety",
+    valuation: "Valuation",
+    critical: "Critical",
+    momentum: "Momentum",
+    risk: "Risk",
+    entry: "Entry",
+    product: "Product",
+    event: "Event",
+    unknown: "Unclassified",
+  };
+  return labels[String(group || "unknown").toLowerCase()] || String(group || "Unclassified");
+}
+
+function normalizePolarity(value) {
+  const polarity = String(value || "neutral").toLowerCase();
+  return Object.prototype.hasOwnProperty.call(polarityColors, polarity) ? polarity : "neutral";
+}
+
+function seedFromString(value) {
+  let hash = 2166136261;
+  for (const character of String(value || "")) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createRandom(seed) {
+  let value = seed >>> 0;
+  return () => {
+    value += 0x6d2b79f5;
+    let result = Math.imul(value ^ (value >>> 15), 1 | value);
+    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function setLoading(visible, text = "Loading snapshot") {
+  dom.loading.hidden = !visible;
+  dom.loadingText.textContent = text;
+}
+
+function setError(message = "ApexView could not read this snapshot.") {
+  dom.error.hidden = false;
+  dom.errorText.textContent = message;
+  setLoading(false);
+}
+
+function clearError() {
+  dom.error.hidden = true;
+}
+
+function validateSnapshot(payload, ticker) {
+  if (!payload || typeof payload !== "object") throw new Error("Snapshot is not an object");
+  if (payload.contract_version !== SNAPSHOT_VERSION) {
+    throw new Error(`Unsupported snapshot contract: ${payload.contract_version || "missing"}`);
+  }
+  const snapshotTicker = String(payload.stock?.ticker || "").toUpperCase();
+  if (!snapshotTicker || snapshotTicker !== ticker) throw new Error("Snapshot ticker does not match selector");
+  if (payload.read_only !== true) throw new Error("Snapshot is not marked read-only");
+  return payload;
+}
+
+function assetUrl(path) {
+  const raw = String(path || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  const base = new URL(import.meta.env.BASE_URL || "/", window.location.origin);
+  return new URL(raw.replace(/^\/+/, ""), base).toString();
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
+function getManifestOptions(manifest) {
+  const options = [];
+  for (const item of manifest.stocks || []) {
+    const ticker = String(item?.ticker || "").toUpperCase();
+    if (!ticker) continue;
+    options.push({ ...item, ticker, kind: item.kind || "short_horizon_candidate" });
+  }
+  for (const [ticker, item] of Object.entries(manifest.test_fixtures || {})) {
+    if (options.some((option) => option.ticker === ticker)) continue;
+    options.push({ ...(item || {}), ticker, kind: "test_fixture" });
+  }
+  return options;
+}
+
+function selectedManifestItem(ticker) {
+  return getManifestOptions(state.manifest).find((item) => item.ticker === ticker);
+}
+
+function populateTickerSelect() {
+  const options = getManifestOptions(state.manifest);
+  dom.tickerSelect.replaceChildren();
+  for (const item of options) {
+    const option = document.createElement("option");
+    option.value = item.ticker;
+    option.textContent = item.kind === "test_fixture"
+      ? `${item.ticker} · fixture`
+      : `#${item.rank || "-"} ${item.ticker}`;
+    dom.tickerSelect.append(option);
+  }
+  if (!options.length) {
+    const option = document.createElement("option");
+    option.value = DEFAULT_TICKER;
+    option.textContent = DEFAULT_TICKER;
+    dom.tickerSelect.append(option);
+  }
+  dom.tickerSelect.value = state.ticker;
+}
+
+function snapshotUrlFor(ticker) {
+  const item = selectedManifestItem(ticker);
+  return assetUrl(item?.snapshot_url || `/data/snapshots/${encodeURIComponent(ticker)}.json`);
+}
+
+async function loadManifest() {
+  try {
+    const manifest = await fetchJson(assetUrl("/data/manifest.json"));
+    if (manifest?.contract_version !== UNIVERSE_VERSION || manifest.read_only !== true) {
+      throw new Error("Unsupported universe manifest");
+    }
+    state.manifest = manifest;
+  } catch {
+    state.manifest = DEFAULT_MANIFEST;
+  }
+  const queryTicker = new URLSearchParams(window.location.search).get("ticker");
+  const available = getManifestOptions(state.manifest).map((item) => item.ticker);
+  state.ticker = available.includes(String(queryTicker || "").toUpperCase())
+    ? String(queryTicker).toUpperCase()
+    : available[0] || DEFAULT_TICKER;
+  populateTickerSelect();
+}
+
+function updateQueryTicker(ticker) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("ticker", ticker);
+  window.history.replaceState({}, "", url);
+}
+
+function disposeObject(object) {
+  object.traverse?.((child) => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) material.dispose();
+    }
+  });
+  object.removeFromParent();
+}
+
+function clearSceneLayers() {
+  for (const object of [...state.nodeObjects.values(), ...state.edgeObjects, ...state.backgroundObjects]) disposeObject(object);
+  state.nodeObjects.clear();
+  state.edgeObjects = [];
+  state.backgroundObjects = [];
+  state.criticalEffects = [];
+  state.animationObjects = [];
+  state.frame = 0;
+  state.lastLabelLayoutAt = 0;
+  tagLayer?.clear();
+  edgeLayer?.clear();
+  backgroundLayer?.clear();
+  if (coreGroup) disposeObject(coreGroup);
+  coreGroup = null;
+  coreLabel = null;
+  selectedRing = null;
+}
+
+function addParticleField({ random, count, radius, size, opacity, colorMode = "white", depth = 0 }) {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const color = new THREE.Color();
+  for (let index = 0; index < count; index += 1) {
+    const theta = random() * Math.PI * 2;
+    const phi = Math.acos(2 * random() - 1);
+    const distance = radius * (0.55 + random() * 0.45);
+    const positionIndex = index * 3;
+    positions[positionIndex] = Math.sin(phi) * Math.cos(theta) * distance;
+    positions[positionIndex + 1] = Math.cos(phi) * distance;
+    positions[positionIndex + 2] = Math.sin(phi) * Math.sin(theta) * distance;
+    if (colorMode === "dust") {
+      const palette = [0x4ee6b0, 0x7bb9ff, 0xb892ff, 0xd47f80, 0xe7ad72];
+      color.setHex(palette[Math.floor(random() * palette.length)]);
+    } else if (colorMode === "cool") {
+      color.setRGB(0.65 + random() * 0.35, 0.78 + random() * 0.22, 0.9 + random() * 0.1);
+    } else {
+      const brightness = 0.55 + random() * 0.45;
+      color.setRGB(brightness, brightness, brightness);
+    }
+    colors[positionIndex] = color.r;
+    colors[positionIndex + 1] = color.g;
+    colors[positionIndex + 2] = color.b;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.PointsMaterial({
+    size,
+    opacity,
+    transparent: true,
+    vertexColors: true,
+    depthWrite: false,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.userData.depth = depth;
+  backgroundLayer.add(points);
+  state.backgroundObjects.push(points);
+  state.animationObjects.push({ object: points, drift: depth ? 0.00008 + depth * 0.00005 : 0 });
+  return points;
+}
+
+function smoothStep(value) {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+}
+
+function buildBackground(ticker) {
+  const random = createRandom(seedFromString(`${ticker}:background`));
+  addParticleField({ random, count: 560, radius: 26, size: 0.042, opacity: 0.62, colorMode: "cool", depth: 0.15 });
+  addParticleField({ random, count: 170, radius: 17, size: 0.065, opacity: 0.48, colorMode: "white", depth: 0.45 });
+  addParticleField({ random, count: 90, radius: 12, size: 0.09, opacity: 0.34, colorMode: "dust", depth: 0.85 });
+  for (let cloud = 0; cloud < 5; cloud += 1) {
+    const dust = addParticleField({ random, count: 115, radius: 10 + random() * 5, size: 0.085 + random() * 0.035, opacity: 0.12, colorMode: "dust", depth: 0.3 });
+    dust.position.set((random() - 0.5) * 11, (random() - 0.5) * 8, (random() - 0.5) * 10);
+    dust.rotation.set(random() * 0.4, random() * 0.4, random() * Math.PI);
+  }
+}
+
+function makeLabel(node, color) {
+  const label = document.createElement("div");
+  label.className = `tag-label ${node.critical ? "is-critical" : ""}`;
+  label.dataset.viewId = node.view_id;
+  label.innerHTML = `
+    <span class="tag-label-top"><span class="tag-label-dot" style="background:${color}"></span><span class="tag-label-name">${escapeHtml(node.label)}</span></span>
+    <span class="tag-label-score">${escapeHtml(formatScore(node.score))}</span>
+    <span class="tag-label-group">${escapeHtml(labelForGroup(node.group))}</span>
+  `;
+  return label;
+}
+
+function nodeRadius(node, maxAbsScore) {
+  const score = numberOrNull(node.score);
+  if (score === null) return 0.14;
+  const ratio = Math.min(1, Math.abs(score) / Math.max(1, maxAbsScore));
+  const scoreRadius = 0.10 + Math.pow(ratio, 0.58) * 0.54;
+  return scoreRadius * (node.critical ? 1.08 : 1);
+}
+
+function tagPosition(random, index, total) {
+  // Keep a protected quiet zone around the ticker while preserving a 3D layout.
+  const slots = [
+    [-7.2, 4.25], [-4.55, 4.55], [-1.7, 4.75], [1.35, 4.65], [4.55, 4.45], [7.45, 3.7],
+    [-7.8, 1.65], [-4.9, 2.05], [5.0, 2.05], [7.95, 1.45],
+    [-8.05, -1.7], [-4.85, -2.15], [4.8, -2.1], [8.05, -1.75],
+    [-7.25, -4.15], [-4.25, -4.55], [-1.35, -4.7], [1.8, -4.7], [4.55, -4.45], [7.5, -3.85],
+  ];
+  const slot = slots[index % slots.length];
+  const extraRing = Math.floor(index / slots.length);
+  const angle = index * 2.39996 + random() * 0.24;
+  const radius = 4.9 + extraRing * 0.8;
+  const depth = (random() - 0.5) * 3.8;
+  const jitter = extraRing ? radius * 0.14 : 0.26;
+  const x = slot[0] + Math.cos(angle) * jitter;
+  const y = slot[1] + Math.sin(angle) * jitter;
+  return new THREE.Vector3(
+    x,
+    y,
+    depth,
+  );
+}
+
+function createCriticalEffect(node, radius, random) {
+  const effect = new THREE.Group();
+  effect.name = `critical-pulse:${node.view_id}`;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius * 1.72, radius * 1.79, 48),
+    new THREE.MeshBasicMaterial({
+      color: 0xc8a0ff,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  const ringMaterial = ring.material;
+  ringMaterial.userData.baseOpacity = 0.44;
+  ring.visible = false;
+  effect.add(ring);
+
+  const dust = [];
+  const dustMaterial = new THREE.MeshBasicMaterial({
+    color: 0xc8a0ff,
+    transparent: true,
+    opacity: 0.16,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  dustMaterial.userData.baseOpacity = 0.16;
+  for (let index = 0; index < 16; index += 1) {
+    const particleRadius = radius * (0.035 + random() * 0.045);
+    const particle = new THREE.Mesh(
+      new THREE.SphereGeometry(particleRadius, 6, 6),
+      dustMaterial,
+    );
+    const angle = random() * Math.PI * 2;
+    const distance = radius * (0.72 + random() * 1.25);
+    particle.position.set(
+      Math.cos(angle) * distance,
+      Math.sin(angle) * distance,
+      (random() - 0.5) * radius * 1.4,
+    );
+    effect.add(particle);
+    dust.push(particle);
+  }
+  effect.userData = {
+    ring,
+    dust,
+    phase: random() * 8.5,
+  };
+  return effect;
+}
+
+function createTagObject(node, position, maxAbsScore, random) {
+  const polarity = normalizePolarity(node.polarity);
+  const color = new THREE.Color(polarityColors[polarity]);
+  const radius = nodeRadius(node, maxAbsScore);
+  const change = String(node.lifecycle?.change || "unknown").toLowerCase();
+  const transitionMode = change === "appeared" || change === "disappeared" ? change : "persisted";
+  const group = new THREE.Group();
+  group.position.copy(position);
+  group.userData = {
+    viewId: node.view_id,
+    node,
+    phase: random() * Math.PI * 2,
+    speed: 0.5 + random() * 0.7,
+    baseRadius: radius,
+    selected: false,
+    transition: {
+      mode: transitionMode,
+      startedAt: state.clock.getElapsedTime(),
+      duration: transitionMode === "disappeared" ? 1.8 : 1.25,
+    },
+  };
+
+  const glowMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.1 : 0.045, blending: THREE.AdditiveBlending, depthWrite: false });
+  const haloMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.15 : 0.075, blending: THREE.AdditiveBlending, depthWrite: false });
+  const bodyMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 });
+  const coreMaterial = new THREE.MeshBasicMaterial({ color: 0xf2fff9, transparent: true, opacity: 0.9 });
+  glowMaterial.userData.baseOpacity = glowMaterial.opacity;
+  haloMaterial.userData.baseOpacity = haloMaterial.opacity;
+  bodyMaterial.userData.baseOpacity = bodyMaterial.opacity;
+  coreMaterial.userData.baseOpacity = coreMaterial.opacity;
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 2.25, 12, 12),
+    glowMaterial,
+  );
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 1.45, 12, 12),
+    haloMaterial,
+  );
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 14, 14),
+    bodyMaterial,
+  );
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 0.38, 10, 10),
+    coreMaterial,
+  );
+  group.add(glow, halo, body, core);
+
+  const direction = position.clone().normalize();
+  const label = new CSS2DObject(makeLabel(node, `#${color.getHexString()}`));
+  label.position.copy(direction.multiplyScalar(0.56 + radius * 0.5));
+  label.position.y += 0.08;
+  group.add(label);
+  const criticalEffect = node.critical ? createCriticalEffect(node, radius, random) : null;
+  if (criticalEffect) group.add(criticalEffect);
+  group.userData.parts = { glow, halo, body, core, label, criticalEffect };
+  group.userData.pickable = body;
+  body.userData.parentNode = group;
+  if (transitionMode === "appeared") {
+    group.scale.setScalar(0.12);
+    label.element.style.opacity = "0";
+  } else if (transitionMode === "disappeared") {
+    group.scale.setScalar(0.88);
+  }
+  return group;
+}
+
+function buildTags(snapshot) {
+  const nodes = (snapshot.nodes || [])
+    .filter((node) => node?.lifecycle?.state !== "inactive" || node?.lifecycle?.change === "disappeared")
+    .slice(0, MAX_RENDER_TAGS);
+  const maxAbsScore = Math.max(1, ...nodes.map((node) => Math.abs(numberOrNull(node.score) || 0)));
+  const random = createRandom(seedFromString(`${snapshot.stock.ticker}:tags`));
+  const positions = new Map();
+  nodes.forEach((node, index) => positions.set(node.view_id, tagPosition(random, index, nodes.length)));
+  for (const [index, node] of nodes.entries()) {
+    const object = createTagObject(node, positions.get(node.view_id), maxAbsScore, random);
+    object.userData.index = index;
+    tagLayer.add(object);
+    state.nodeObjects.set(node.view_id, object);
+    state.animationObjects.push(object);
+  }
+  return positions;
+}
+
+function buildEdges(snapshot, positions) {
+  for (const edge of snapshot.edges || []) {
+    const source = positions.get(edge.source);
+    const target = positions.get(edge.target);
+    if (!source || !target) continue;
+    const geometry = new THREE.BufferGeometry().setFromPoints([source, target]);
+    const material = new THREE.LineDashedMaterial({
+      color: 0xb992ff,
+      transparent: true,
+      opacity: 0.24,
+      dashSize: 0.22,
+      gapSize: 0.32,
+      linewidth: 1,
+      depthWrite: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.computeLineDistances();
+    line.userData = {
+      edge,
+      phase: createRandom(seedFromString(`${snapshot.stock.ticker}:edge:${edge.source}:${edge.target}`))(),
+      baseOpacity: material.opacity,
+    };
+    edgeLayer.add(line);
+    state.edgeObjects.push(line);
+  }
+}
+
+function buildCore(snapshot) {
+  const stock = snapshot.stock || {};
+  coreGroup = new THREE.Group();
+  const coreColor = new THREE.Color(0xeffff8);
+  const outer = new THREE.Mesh(
+    new THREE.SphereGeometry(1.65, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  const mid = new THREE.Mesh(
+    new THREE.SphereGeometry(1.08, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 22), new THREE.MeshBasicMaterial({ color: coreColor }));
+  const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  coreGroup.add(outer, mid, core, highlight);
+  coreGroup.userData = { outer, mid, core, highlight, phase: 0.4 };
+  galaxyRoot.add(coreGroup);
+
+  const labelElement = document.createElement("div");
+  labelElement.className = "core-label";
+  labelElement.innerHTML = `
+    <span class="core-label-ticker">${escapeHtml(stock.ticker || "--")}</span>
+    <span class="core-label-name">${escapeHtml(stock.name || "ApexView snapshot")}</span>
+    <span class="core-label-state">${escapeHtml(stock.action || "READ-ONLY")}</span>
+  `;
+  coreLabel = new CSS2DObject(labelElement);
+  coreLabel.position.set(0, -1.1, 0);
+  coreGroup.add(coreLabel);
+}
+
+function createSelectedRing() {
+  selectedRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.72, 0.77, 48),
+    new THREE.MeshBasicMaterial({ color: 0xd1a5ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  selectedRing.visible = false;
+  galaxyRoot.add(selectedRing);
+}
+
+function renderGalaxy(snapshot) {
+  clearSceneLayers();
+  state.snapshot = snapshot;
+  buildBackground(snapshot.stock.ticker);
+  const positions = buildTags(snapshot);
+  buildEdges(snapshot, positions);
+  buildCore(snapshot);
+  createSelectedRing();
+  state.selectedId = "";
+  if (controls) {
+    controls.target.set(0, 0, 0);
+    controls.reset();
+  }
+}
+
+function updateCoreAnimation(time) {
+  if (!coreGroup) return;
+  const pulse = 1 + Math.sin(time * 0.75 + coreGroup.userData.phase) * 0.055;
+  coreGroup.userData.outer.scale.setScalar(pulse);
+  coreGroup.userData.mid.scale.setScalar(1 + Math.sin(time * 0.95) * 0.045);
+  coreGroup.userData.highlight.scale.setScalar(1 + Math.sin(time * 1.1) * 0.08);
+}
+
+function updateNodeAnimation(time) {
+  for (const object of state.nodeObjects.values()) {
+    const { glow, halo, body, core, label, criticalEffect } = object.userData.parts;
+    const transition = object.userData.transition || {};
+    const progress = transition.duration
+      ? Math.max(0, Math.min(1, (time - transition.startedAt) / transition.duration))
+      : 1;
+    let visibility = 1;
+    let transitionScale = 1;
+    if (transition.mode === "appeared") {
+      const eased = smoothStep(progress);
+      visibility = eased;
+      transitionScale = 0.12 + eased * 0.88;
+    } else if (transition.mode === "disappeared") {
+      const eased = smoothStep(progress);
+      visibility = 1 - eased;
+      transitionScale = 0.88 + (1 - eased) * 0.12;
+      if (progress >= 1) {
+        object.visible = false;
+        label.element.style.opacity = "0";
+        continue;
+      }
+    }
+    object.visible = true;
+    const pulse = 1 + Math.sin(time * object.userData.speed + object.userData.phase) * 0.08;
+    glow.scale.setScalar(pulse);
+    halo.scale.setScalar(1 + (pulse - 1) * 0.55);
+    object.rotation.y += 0.0008;
+    object.scale.setScalar((object.userData.selected ? 1.16 : 1) * transitionScale);
+    label.element.style.opacity = String(visibility);
+    for (const mesh of [glow, halo, body, core]) {
+      const baseOpacity = mesh.material?.userData?.baseOpacity;
+      if (typeof baseOpacity === "number") mesh.material.opacity = baseOpacity * visibility;
+    }
+    if (criticalEffect) {
+      const cycle = ((time + criticalEffect.userData.phase) % 8.5) / 8.5;
+      const active = cycle < 0.24;
+      const pulseProgress = active ? cycle / 0.24 : 0;
+      const easedPulse = smoothStep(pulseProgress);
+      const ring = criticalEffect.userData.ring;
+      ring.visible = active && visibility > 0;
+      ring.quaternion.copy(camera.quaternion);
+      ring.scale.setScalar(1 + easedPulse * 0.72);
+      ring.material.opacity = active
+        ? ring.material.userData.baseOpacity * (1 - easedPulse) * visibility
+        : 0;
+      for (const particle of criticalEffect.userData.dust) {
+        const baseOpacity = particle.material?.userData?.baseOpacity;
+        if (typeof baseOpacity === "number") {
+          particle.material.opacity = baseOpacity * visibility * (0.7 + Math.sin(time * 0.45 + particle.position.x) * 0.2);
+        }
+      }
+      criticalEffect.rotation.z += 0.0006;
+    }
+  }
+  if (selectedRing?.visible) {
+    selectedRing.quaternion.copy(camera.quaternion);
+    const pulse = 1 + Math.sin(time * 2.2) * 0.08;
+    selectedRing.scale.setScalar(pulse);
+    selectedRing.material.opacity = 0.58 + Math.sin(time * 2.2) * 0.2;
+  }
+}
+
+function updateEdgeAnimation(time) {
+  for (const line of state.edgeObjects) {
+    line.material.dashOffset = -(time * 0.035 + line.userData.phase);
+    line.material.opacity = line.userData.baseOpacity * (0.82 + Math.sin(time * 0.45 + line.userData.phase) * 0.18);
+  }
+}
+
+function rectanglesOverlap(left, right, padding = 4) {
+  return !(
+    left.right + padding <= right.left
+    || left.left - padding >= right.right
+    || left.bottom + padding <= right.top
+    || left.top - padding >= right.bottom
+  );
+}
+
+function resolveLabelOverlaps() {
+  if (!labelRenderer) return;
+  const occupied = [];
+  if (coreLabel?.element && coreLabel.element.getBoundingClientRect().width > 0) {
+    const rect = coreLabel.element.getBoundingClientRect();
+    occupied.push({ left: rect.left - 14, right: rect.right + 14, top: rect.top - 14, bottom: rect.bottom + 14 });
+  }
+  const labels = [...state.nodeObjects.values()]
+    .filter((object) => object.visible && object.userData.parts?.label?.element?.style.opacity !== "0")
+    .map((object) => ({
+      object,
+      element: object.userData.parts.label.element,
+      node: object.userData.node,
+    }))
+    .sort((left, right) => {
+      const leftCritical = left.node.critical ? 1 : 0;
+      const rightCritical = right.node.critical ? 1 : 0;
+      if (leftCritical !== rightCritical) return rightCritical - leftCritical;
+      const leftScore = Math.abs(numberOrNull(left.node.score) || 0);
+      const rightScore = Math.abs(numberOrNull(right.node.score) || 0);
+      return rightScore - leftScore;
+    });
+  const offsets = [
+    [0, 0], [18, 0], [-18, 0], [0, 18], [0, -18],
+    [30, 12], [-30, 12], [30, -12], [-30, -12],
+    [48, 0], [-48, 0], [0, 34], [0, -34],
+  ];
+  for (const item of labels) {
+    item.element.style.marginLeft = "0px";
+    item.element.style.marginTop = "0px";
+    let chosen = item.element.getBoundingClientRect();
+    let chosenOffset = [0, 0];
+    let bestOverlap = Number.POSITIVE_INFINITY;
+    for (const [x, y] of offsets) {
+      item.element.style.marginLeft = `${x}px`;
+      item.element.style.marginTop = `${y}px`;
+      const candidate = item.element.getBoundingClientRect();
+      const overlap = occupied.reduce((total, rect) => total + (rectanglesOverlap(candidate, rect) ? 1 : 0), 0);
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap;
+        chosen = candidate;
+        chosenOffset = [x, y];
+      }
+      if (overlap === 0) break;
+    }
+    item.element.style.marginLeft = `${chosenOffset[0]}px`;
+    item.element.style.marginTop = `${chosenOffset[1]}px`;
+    chosen = item.element.getBoundingClientRect();
+    occupied.push(chosen);
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  state.frame += 1;
+  const time = state.clock.getElapsedTime();
+  for (const item of state.animationObjects) {
+    if (item?.object && item.drift) {
+      item.object.rotation.y += item.drift;
+      item.object.rotation.x += item.drift * 0.37;
+    }
+  }
+  updateCoreAnimation(time);
+  updateNodeAnimation(time);
+  updateEdgeAnimation(time);
+  controls?.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+  if (state.frame % 8 === 0 && time - state.lastLabelLayoutAt > 0.12) {
+    resolveLabelOverlaps();
+    state.lastLabelLayoutAt = time;
+  }
+}
+
+function initScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x02070c);
+  scene.fog = new THREE.FogExp2(0x02070c, 0.008);
+  camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  camera.position.set(0, 1.8, 20);
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.domElement.setAttribute("aria-label", "Interactive 3D ApexView Galaxy");
+  renderer.domElement.setAttribute("role", "img");
+  dom.galaxy.append(renderer.domElement);
+  labelRenderer = new CSS2DRenderer();
+  labelRenderer.domElement.className = "label-layer";
+  dom.galaxy.append(labelRenderer.domElement);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.045;
+  controls.enablePan = false;
+  controls.minDistance = 10;
+  controls.maxDistance = 34;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.08;
+  galaxyRoot = new THREE.Group();
+  backgroundLayer = new THREE.Group();
+  edgeLayer = new THREE.Group();
+  tagLayer = new THREE.Group();
+  galaxyRoot.add(backgroundLayer, edgeLayer, tagLayer);
+  scene.add(galaxyRoot);
+  resizeScene();
+  window.addEventListener("resize", resizeScene);
+  dom.galaxy.addEventListener("pointermove", onPointerMove);
+  dom.galaxy.addEventListener("pointerdown", onPointerDown);
+  dom.galaxy.addEventListener("pointerup", onPointerUp);
+  dom.galaxy.addEventListener("pointerleave", () => { dom.galaxy.classList.remove("is-hovering"); });
+  animate();
+}
+
+function resizeScene() {
+  if (!renderer || !camera) return;
+  const width = dom.galaxy.clientWidth || 1;
+  const height = dom.galaxy.clientHeight || 1;
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height, false);
+  labelRenderer.setSize(width, height);
+}
+
+function pickNode(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  state.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  state.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  state.raycaster.setFromCamera(state.pointer, camera);
+  const pickables = [...state.nodeObjects.values()].map((object) => object.userData.pickable);
+  const intersections = state.raycaster.intersectObjects(pickables, false);
+  return intersections[0]?.object?.userData?.parentNode || null;
+}
+
+function onPointerMove(event) {
+  const node = pickNode(event);
+  dom.galaxy.classList.toggle("is-hovering", Boolean(node));
+}
+
+function onPointerDown(event) {
+  state.pointerDown = { x: event.clientX, y: event.clientY };
+}
+
+function onPointerUp(event) {
+  if (!state.pointerDown) return;
+  const distance = Math.hypot(event.clientX - state.pointerDown.x, event.clientY - state.pointerDown.y);
+  state.pointerDown = null;
+  if (distance > 6) return;
+  const node = pickNode(event);
+  if (node) selectNode(node.userData.viewId);
+}
+
+function selectNode(viewId) {
+  const nodeObject = state.nodeObjects.get(viewId);
+  const node = nodeObject?.userData?.node;
+  if (!node) return;
+  state.selectedId = viewId;
+  if (selectedRing) {
+    selectedRing.visible = true;
+    selectedRing.position.copy(nodeObject.position);
+    selectedRing.material.color.setHex(polarityColors[normalizePolarity(node.polarity)]);
+  }
+  renderDetail(node);
+  for (const object of state.nodeObjects.values()) {
+    const active = object.userData.viewId === viewId;
+    object.userData.selected = active;
+    object.userData.parts.label.element?.classList.toggle("is-selected", active);
+  }
+}
+
+function clearSelection() {
+  state.selectedId = "";
+  if (selectedRing) selectedRing.visible = false;
+  dom.detailEmpty.hidden = false;
+  dom.detailContent.hidden = true;
+  for (const object of state.nodeObjects.values()) {
+    object.userData.selected = false;
+    object.userData.parts.label.element?.classList.remove("is-selected");
+  }
+}
+
+function renderDetail(node) {
+  const polarity = normalizePolarity(node.polarity);
+  dom.detailEmpty.hidden = true;
+  dom.detailContent.hidden = false;
+  dom.detailMoodDot.className = `mood-dot ${polarityClasses[polarity]}`;
+  dom.detailGroup.textContent = labelForGroup(node.group);
+  dom.detailCritical.hidden = !node.critical;
+  dom.detailLabel.textContent = node.label || "Unnamed TAG";
+  dom.detailScore.textContent = formatScore(node.score);
+  dom.detailScore.className = `detail-score ${polarityClasses[polarity]}`;
+  dom.detailReason.textContent = node.reason || "ไม่มีคำอธิบายจาก snapshot";
+  dom.detailComponents.replaceChildren();
+  const components = Array.isArray(node.components) ? node.components : [];
+  if (!components.length) {
+    const empty = document.createElement("span");
+    empty.className = "component-empty";
+    empty.textContent = "ไม่มี component ที่ประกาศไว้";
+    dom.detailComponents.append(empty);
+  } else {
+    for (const component of components) {
+      const chip = document.createElement("span");
+      chip.className = "component-chip";
+      chip.textContent = component;
+      dom.detailComponents.append(chip);
+    }
+  }
+  const provenance = node.provenance || {};
+  const validation = node.validation || {};
+  dom.detailChain.innerHTML = `
+    <span class="chain-step"><b>${escapeHtml(provenance.source || "ApexThinker")}</b><small>ต้นทาง</small></span>
+    <span class="chain-arrow">→</span>
+    <span class="chain-step"><b>${escapeHtml(node.label || "TAG")}</b><small>snapshot node</small></span>
+    <span class="chain-arrow">→</span>
+    <span class="chain-step"><b>${escapeHtml(validation.status || "ไม่ได้แนบผลตรวจ")}</b><small>validation</small></span>
+  `;
+  const lifecycle = node.lifecycle || {};
+  const hidden = node.hidden || {};
+  dom.detailFacts.innerHTML = `
+    <div><span>POLARITY</span><strong>${escapeHtml(polarity)}</strong></div>
+    <div><span>LIFECYCLE</span><strong>${escapeHtml(lifecycle.state || "unknown")}</strong></div>
+    <div><span>CHANGE</span><strong>${escapeHtml(lifecycle.change || "unknown")}</strong></div>
+    <div><span>HIDDEN STATE</span><strong>${escapeHtml(hidden.state || "normal")}</strong></div>
+    <div><span>SIZE SOURCE</span><strong>${escapeHtml(node.display?.size_source || "unknown")}</strong></div>
+  `;
+}
+
+function renderSummary(snapshot) {
+  const stock = snapshot.stock || {};
+  const counts = snapshot.counts || {};
+  dom.ticker.textContent = stock.ticker || "--";
+  dom.stockName.textContent = stock.name || `${stock.ticker || "Stock"} · read-only evidence field`;
+  dom.price.textContent = formatPrice(stock.price);
+  dom.action.textContent = stock.action || "READ-ONLY";
+  dom.action.className = `action-label ${String(stock.action || "").toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`;
+  dom.marketMode.textContent = stock.market_mode || "ไม่ระบุ";
+  dom.snapshotTime.textContent = formatDate(snapshot.as_of?.snapshot_ts || snapshot.generated_at);
+  dom.marketTime.textContent = formatDate(snapshot.as_of?.market_ts);
+  dom.logicVersion.textContent = snapshot.logic_version || "ไม่ระบุ";
+  dom.sourceContract.textContent = snapshot.contract_version || SNAPSHOT_VERSION;
+  dom.activeCount.textContent = `${counts.active || 0} ACTIVE`;
+  dom.positiveCount.textContent = counts.positive || 0;
+  dom.negativeCount.textContent = counts.negative || 0;
+  dom.cautionCount.textContent = counts.caution || 0;
+  dom.neutralCount.textContent = counts.neutral || 0;
+  dom.criticalCount.textContent = counts.critical || 0;
+  dom.fixtureBadge.hidden = selectedManifestItem(stock.ticker)?.kind !== "test_fixture";
+  if (dom.timelineStatus) {
+    const timeline = snapshot.timeline || {};
+    const appeared = Array.isArray(timeline.appeared) ? timeline.appeared.length : 0;
+    const disappeared = Array.isArray(timeline.disappeared) ? timeline.disappeared.length : 0;
+    dom.timelineStatus.textContent = timeline.comparison_available
+      ? `LIFECYCLE · +${appeared} / -${disappeared}`
+      : "LIFECYCLE · BASELINE";
+  }
+}
+
+function renderEvents(snapshot) {
+  const events = Array.isArray(snapshot.events) ? snapshot.events.slice(0, 5) : [];
+  dom.eventCount.textContent = `${events.length} RECENT`;
+  dom.eventList.replaceChildren();
+  if (!events.length) {
+    const empty = document.createElement("span");
+    empty.className = "event-empty";
+    empty.textContent = "No bounded events attached to this snapshot";
+    dom.eventList.append(empty);
+    return;
+  }
+  for (const event of events) {
+    const item = document.createElement("div");
+    item.className = "event-item";
+    item.innerHTML = `
+      <span class="event-marker"></span>
+      <time>${escapeHtml(formatShortDate(event.observed_at))}</time>
+      <span class="event-summary">${escapeHtml(event.summary || event.event_type || "Evidence event")}</span>
+      <span class="event-source">${escapeHtml(event.source || "snapshot")}</span>
+    `;
+    dom.eventList.append(item);
+  }
+}
+
+async function loadTicker(ticker) {
+  const normalized = String(ticker || DEFAULT_TICKER).toUpperCase();
+  state.ticker = normalized;
+  dom.tickerSelect.value = normalized;
+  updateQueryTicker(normalized);
+  clearError();
+  clearSelection();
+  setLoading(true, `Loading ${normalized} snapshot`);
+  try {
+    const snapshot = validateSnapshot(await fetchJson(snapshotUrlFor(normalized)), normalized);
+    renderSummary(snapshot);
+    renderEvents(snapshot);
+    renderGalaxy(snapshot);
+    setLoading(false);
+  } catch (error) {
+    setError(error instanceof Error ? error.message : "Snapshot unavailable");
+  }
+}
+
+function adjustZoom(delta) {
+  if (!camera || !controls) return;
+  const direction = camera.position.clone().sub(controls.target).normalize();
+  camera.position.addScaledVector(direction, delta);
+  const distance = camera.position.distanceTo(controls.target);
+  if (distance < controls.minDistance || distance > controls.maxDistance) camera.position.sub(direction.multiplyScalar(delta));
+}
+
+function bindUi() {
+  dom.tickerSelect.addEventListener("change", () => loadTicker(dom.tickerSelect.value));
+  $("#refresh-button").addEventListener("click", () => loadTicker(state.ticker));
+  $("#retry-button").addEventListener("click", () => loadTicker(state.ticker));
+  $("#clear-selection").addEventListener("click", clearSelection);
+  $("#reset-camera").addEventListener("click", () => controls?.reset());
+  $("#zoom-in").addEventListener("click", () => adjustZoom(-1.5));
+  $("#zoom-out").addEventListener("click", () => adjustZoom(1.5));
+  $("#fullscreen-button").addEventListener("click", async () => {
+    if (!document.fullscreenElement) await dom.stage.requestFullscreen?.();
+    else await document.exitFullscreen?.();
+  });
+  setInterval(() => {
+    dom.clock.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
+  }, 1000);
+}
+
+async function boot() {
+  createIcons({
+    icons: {
+      Activity,
+      Bell,
+      BrainCircuit,
+      CalendarDays,
+      CircleHelp,
+      List,
+      Maximize2,
+      MousePointer2,
+      Network,
+      Orbit,
+      RefreshCw,
+      RotateCcw,
+      Settings2,
+      ShieldCheck,
+      TriangleAlert,
+      X,
+      ZoomIn,
+      ZoomOut,
+    },
+  });
+  initScene();
+  bindUi();
+  await loadManifest();
+  await loadTicker(state.ticker);
+}
+
+boot().catch((error) => setError(error instanceof Error ? error.message : "ApexView failed to start"));

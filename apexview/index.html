@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#02070c" />
+    <meta name="description" content="ApexView read-only spatial evidence viewer" />
+    <title>ApexView / Galaxy</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"><i data-lucide="brain-circuit"></i></span>
+          <span class="brand-name">apexthinker</span>
+          <span class="brand-divider"></span>
+          <span class="product-name">APEXVIEW</span>
+        </div>
+        <div class="runtime-status" aria-label="Runtime status">
+          <span class="status-dot"></span>
+          <span>READ-ONLY</span>
+          <time id="runtime-clock">--:--:--</time>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" id="refresh-button" aria-label="Reload snapshot" data-tooltip="Reload snapshot">
+            <i data-lucide="refresh-cw"></i>
+          </button>
+          <button class="icon-button" id="fullscreen-button" aria-label="Toggle fullscreen" data-tooltip="Fullscreen">
+            <i data-lucide="maximize-2"></i>
+          </button>
+        </div>
+      </header>
+
+      <aside class="sidebar" aria-label="ApexView navigation">
+        <nav>
+          <button class="nav-button is-active" aria-label="Galaxy" data-tooltip="Galaxy"><i data-lucide="orbit"></i></button>
+          <button class="nav-button" aria-label="Signals" data-tooltip="Signals"><i data-lucide="activity"></i></button>
+          <button class="nav-button" aria-label="Lineage" data-tooltip="Lineage"><i data-lucide="network"></i></button>
+          <button class="nav-button" aria-label="Snapshot list" data-tooltip="Snapshot list"><i data-lucide="list"></i></button>
+          <button class="nav-button" aria-label="Timeline" data-tooltip="Timeline"><i data-lucide="calendar-days"></i></button>
+        </nav>
+        <nav class="sidebar-bottom">
+          <button class="nav-button" aria-label="Notifications" data-tooltip="Notifications"><i data-lucide="bell"></i></button>
+          <button class="nav-button" aria-label="Settings" data-tooltip="Settings"><i data-lucide="settings-2"></i></button>
+          <button class="nav-button" aria-label="Help" data-tooltip="Help"><i data-lucide="circle-help"></i></button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <section class="galaxy-stage" id="galaxy-stage" aria-label="ApexView Galaxy">
+          <div id="galaxy-canvas" class="galaxy-canvas"></div>
+          <div class="stage-vignette" aria-hidden="true"></div>
+          <div class="stage-meta stage-meta-left">
+            <span class="eyebrow">SPATIAL EVIDENCE</span>
+            <span class="meta-line">Snapshot projection · no inferred relationships</span>
+          </div>
+          <div class="stage-meta stage-meta-right">
+            <span class="eyebrow">SOURCE</span>
+            <span class="meta-line" id="source-contract">APEXVIEW-SNAPSHOT-v1.0</span>
+            <span class="meta-line" id="timeline-status">LIFECYCLE · BASELINE</span>
+          </div>
+          <div class="stage-controls" aria-label="Galaxy controls">
+            <button class="stage-control" id="reset-camera" aria-label="Reset camera" data-tooltip="Reset camera"><i data-lucide="rotate-ccw"></i></button>
+            <button class="stage-control" id="zoom-out" aria-label="Zoom out" data-tooltip="Zoom out"><i data-lucide="zoom-out"></i></button>
+            <button class="stage-control" id="zoom-in" aria-label="Zoom in" data-tooltip="Zoom in"><i data-lucide="zoom-in"></i></button>
+          </div>
+          <div class="loading-state" id="loading-state">
+            <span class="loading-spinner"></span>
+            <span id="loading-text">Loading snapshot</span>
+          </div>
+          <div class="error-state" id="error-state" hidden>
+            <i data-lucide="triangle-alert"></i>
+            <strong>Snapshot unavailable</strong>
+            <span id="error-text">ApexView could not read this snapshot.</span>
+            <button class="text-button" id="retry-button">Retry</button>
+          </div>
+        </section>
+
+        <section class="event-strip" aria-label="Recent evidence events">
+          <div class="event-strip-heading">
+            <span class="eyebrow">EVENT FEED</span>
+            <span class="event-count" id="event-count">0</span>
+          </div>
+          <div class="event-list" id="event-list"></div>
+        </section>
+      </main>
+
+      <aside class="inspector" aria-label="ApexView snapshot inspector">
+        <section class="ticker-header">
+          <div class="ticker-select-wrap">
+            <label for="ticker-select">GALAXY</label>
+            <select id="ticker-select" aria-label="Select galaxy"></select>
+          </div>
+          <span class="fixture-badge" id="fixture-badge" hidden>TEST FIXTURE</span>
+        </section>
+
+        <section class="stock-summary">
+          <div class="stock-summary-main">
+            <span class="eyebrow">APEXVIEW / SNAPSHOT</span>
+            <h1 id="stock-ticker">--</h1>
+            <p id="stock-name">Waiting for source snapshot</p>
+          </div>
+          <div class="stock-price-block">
+            <span class="eyebrow">PRICE</span>
+            <strong id="stock-price">--</strong>
+            <span id="stock-action" class="action-label">--</span>
+          </div>
+        </section>
+
+        <section class="metric-grid" aria-label="Snapshot metrics">
+          <div class="metric-row"><span>MARKET MODE</span><strong id="market-mode">--</strong></div>
+          <div class="metric-row"><span>SNAPSHOT TIME</span><strong id="snapshot-time">--</strong></div>
+          <div class="metric-row"><span>MARKET TIME</span><strong id="market-time">--</strong></div>
+          <div class="metric-row"><span>LOGIC VERSION</span><strong id="logic-version">--</strong></div>
+        </section>
+
+        <section class="tag-summary">
+          <div class="section-heading">
+            <span class="eyebrow">TAG FIELD</span>
+            <strong id="active-count">0 ACTIVE</strong>
+          </div>
+          <div class="legend-list">
+            <div><span class="legend-swatch positive"></span><span>Positive</span><strong id="positive-count">0</strong></div>
+            <div><span class="legend-swatch negative"></span><span>Negative</span><strong id="negative-count">0</strong></div>
+            <div><span class="legend-swatch caution"></span><span>Caution</span><strong id="caution-count">0</strong></div>
+            <div><span class="legend-swatch neutral"></span><span>Neutral</span><strong id="neutral-count">0</strong></div>
+            <div><span class="legend-swatch critical"></span><span>Critical emphasis</span><strong id="critical-count">0</strong></div>
+          </div>
+        </section>
+
+        <section class="detail-panel" id="detail-panel">
+          <div class="section-heading">
+            <span class="eyebrow">SELECTED EVIDENCE</span>
+            <button class="icon-button small" id="clear-selection" aria-label="Clear selected evidence" data-tooltip="Clear selection"><i data-lucide="x"></i></button>
+          </div>
+          <div class="detail-empty" id="detail-empty">
+            <i data-lucide="mouse-pointer-2"></i>
+            <span>Click a TAG star to inspect its source, score, lifecycle and declared evidence.</span>
+          </div>
+          <div class="detail-content" id="detail-content" hidden>
+            <div class="detail-kicker"><span class="mood-dot" id="detail-mood-dot"></span><span id="detail-group">--</span><span id="detail-critical" class="critical-chip" hidden>CRITICAL</span></div>
+            <h2 id="detail-label">--</h2>
+            <div class="detail-score" id="detail-score">--</div>
+            <p id="detail-reason">--</p>
+            <div class="detail-block">
+              <span class="detail-label">DECLARED COMPONENTS</span>
+              <div class="component-list" id="detail-components"></div>
+            </div>
+            <div class="detail-block evidence-block">
+              <span class="detail-label">EVIDENCE CHAIN</span>
+              <div class="evidence-chain" id="detail-chain"></div>
+            </div>
+            <div class="detail-facts" id="detail-facts"></div>
+          </div>
+        </section>
+
+        <section class="truth-note">
+          <i data-lucide="shield-check"></i>
+          <div>
+            <span class="eyebrow">DISPLAY RULE</span>
+            <p>Distance is visual only. Edges appear only when the snapshot declares <code>tag.components</code> lineage.</p>
+          </div>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

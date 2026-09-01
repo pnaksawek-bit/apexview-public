@@ -1,0 +1,30 @@
+{
+  "contract_version": "APEXVIEW-UNIVERSE-v1.0",
+  "read_only": true,
+  "generated_at": 1788280720,
+  "source": {
+    "kind": "short_horizon_ranking",
+    "mode": "current",
+    "logic_version": "SHORT-HORIZON-v1.17",
+    "version_source": "desired_version_no_live_rows",
+    "limit": 20
+  },
+  "stocks": [],
+  "counts": {
+    "selected": 0,
+    "exported": 0,
+    "failed": 0
+  },
+  "failures": [],
+  "test_fixtures": {
+    "RKLB": {
+      "snapshot_url": "/data/snapshots/RKLB.json",
+      "reason": "Phase 2 runtime proof only; not a Short Horizon candidate"
+    }
+  },
+  "truth_limits": [
+    "หุ้นใน stocks มาจาก Short Horizon mode=current เท่านั้น",
+    "RKLB อยู่ใน test_fixtures แยกจาก candidate universe",
+    "ApexView ไม่คำนวณคะแนนหรือเพิ่มหุ้นเอง"
+  ]
+}

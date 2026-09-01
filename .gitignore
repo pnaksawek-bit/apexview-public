@@ -1,0 +1,4 @@
+apexview/node_modules/
+apexview/dist/
+apexview/.vite/
+*.log
