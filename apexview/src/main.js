@@ -65,6 +65,8 @@ const SNAPSHOT_VERSION = "APEXVIEW-SNAPSHOT-v1.0";
 const UNIVERSE_VERSION = "APEXVIEW-UNIVERSE-v1.0";
 const MARKET_CHART_VERSION = "APEXVIEW-MARKET-CHART-v1.0";
 const TIMELINE_VERSION = "APEXVIEW-EVIDENCE-TIMELINE-v1.0";
+const TRADE_TIMEFRAME_VERSION = "APEX-TRADE-TIMEFRAME-v1.0";
+const TRADE_PLAN_VERSION = "APEX-TRADE-PLAN-v1.0";
 const DEFAULT_TICKER = "RKLB";
 const MAX_RENDER_TAGS = 80;
 const MAX_VISIBLE_TRADE_TAGS = 6;
@@ -166,6 +168,17 @@ const dom = {
   tradeBalance: $("#trade-balance"),
   tradeCoverage: $("#trade-coverage"),
   tradeTagList: $("#trade-tag-list"),
+  tradeTimeframe: $("#trade-timeframe"),
+  tradeTimeframeList: $("#trade-timeframe-list"),
+  tradePlan: $("#trade-plan"),
+  tradePlanStatus: $("#trade-plan-status"),
+  tradeEntryZone: $("#trade-entry-zone"),
+  tradeInvalidation: $("#trade-invalidation"),
+  tradeTarget: $("#trade-target"),
+  tradeTimeStop: $("#trade-time-stop"),
+  tradeRiskReward: $("#trade-risk-reward"),
+  tradeEv: $("#trade-ev"),
+  tradePlanNote: $("#trade-plan-note"),
   tradeGateNote: $("#trade-gate-note"),
   timelinePlay: $("#timeline-play"),
 };
@@ -221,6 +234,16 @@ function formatScore(value) {
 function formatPrice(value) {
   const price = numberOrNull(value);
   return price === null ? "--" : price.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function formatPlanPercent(value) {
+  const number = numberOrNull(value);
+  return number === null ? "--" : `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function formatPlanMultiple(value) {
+  const number = numberOrNull(value);
+  return number === null ? "--" : `${number.toFixed(2)}x`;
 }
 
 function formatDate(timestamp) {
@@ -555,6 +578,21 @@ function validateSnapshot(payload, ticker) {
   if (payload.evidence_timeline && (payload.evidence_timeline.version !== TIMELINE_VERSION || payload.evidence_timeline.read_only !== true)) {
     throw new Error("Unsupported evidence-timeline contract");
   }
+  const timeframe = payload.trade?.timeframe;
+  if (timeframe && timeframe.version !== TRADE_TIMEFRAME_VERSION) {
+    throw new Error("Unsupported trade-timeframe contract");
+  }
+  const plan = payload.trade?.plan;
+  if (plan && (
+    plan.version !== TRADE_PLAN_VERSION
+    || plan.read_only !== true
+    || plan.execution_enabled !== false
+    || plan.can_submit_broker !== false
+    || plan.live_execution_enabled !== false
+    || plan.broker_order !== null
+  )) {
+    throw new Error("Trade plan violates paper-only boundary");
+  }
   if (payload.trade?.execution_authority === true || payload.trade?.weight_impact_pct) {
     throw new Error("Trade projection violates read-only boundary");
   }
@@ -733,9 +771,17 @@ function buildBackground(ticker) {
   }
 }
 
+function signalActiveForNode(node) {
+  return Boolean(
+    node?.display?.signal_active === true
+    || node?.critical === true
+    || (node?.group === "trade" && node?.status === "passed")
+  );
+}
+
 function makeLabel(node, color) {
   const label = document.createElement("div");
-  label.className = `tag-label ${node.critical ? "is-critical" : ""}`;
+  label.className = `tag-label ${node.critical ? "is-critical" : ""} ${signalActiveForNode(node) ? "is-signal-active" : ""}`;
   label.dataset.viewId = node.view_id;
   label.innerHTML = `
     <span class="tag-label-top"><span class="tag-label-dot" style="background:${color}"></span><span class="tag-label-name">${escapeHtml(node.label)}</span></span>
@@ -747,10 +793,10 @@ function makeLabel(node, color) {
 
 function nodeRadius(node, maxAbsScore) {
   const score = numberOrNull(node.score);
-  if (score === null) return 0.14;
+  if (score === null) return 0.07;
   const ratio = Math.min(1, Math.abs(score) / Math.max(1, maxAbsScore));
-  const scoreRadius = 0.10 + Math.pow(ratio, 0.58) * 0.54;
-  return scoreRadius * (node.critical ? 1.08 : 1);
+  const scoreRadius = 0.045 + Math.pow(ratio, 0.62) * 0.17;
+  return scoreRadius * (node.critical ? 1.14 : signalActiveForNode(node) ? 1.06 : 1);
 }
 
 function tagPosition(random, index, total) {
@@ -838,6 +884,7 @@ function createTagObject(node, position, maxAbsScore, random) {
   group.userData = {
     viewId: node.view_id,
     node,
+    signalActive: signalActiveForNode(node),
     phase: random() * Math.PI * 2,
     speed: 0.5 + random() * 0.7,
     baseRadius: radius,
@@ -849,8 +896,8 @@ function createTagObject(node, position, maxAbsScore, random) {
     },
   };
 
-  const glowMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.1 : 0.045, blending: THREE.AdditiveBlending, depthWrite: false });
-  const haloMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.15 : 0.075, blending: THREE.AdditiveBlending, depthWrite: false });
+  const glowMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.16 : signalActiveForNode(node) ? 0.1 : 0.026, blending: THREE.AdditiveBlending, depthWrite: false });
+  const haloMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: node.critical ? 0.23 : signalActiveForNode(node) ? 0.15 : 0.052, blending: THREE.AdditiveBlending, depthWrite: false });
   const bodyMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 });
   const coreMaterial = new THREE.MeshBasicMaterial({ color: 0xf2fff9, transparent: true, opacity: 0.9 });
   glowMaterial.userData.baseOpacity = glowMaterial.opacity;
@@ -870,7 +917,7 @@ function createTagObject(node, position, maxAbsScore, random) {
     bodyMaterial,
   );
   const core = new THREE.Mesh(
-    new THREE.SphereGeometry(radius * 0.38, 10, 10),
+    new THREE.SphereGeometry(radius * 0.42, 10, 10),
     coreMaterial,
   );
   group.add(glow, halo, body, core);
@@ -961,15 +1008,15 @@ function buildCore(snapshot) {
   coreGroup = new THREE.Group();
   const coreColor = new THREE.Color(0xeffff8);
   const outer = new THREE.Mesh(
-    new THREE.SphereGeometry(1.65, 24, 24),
+    new THREE.SphereGeometry(0.34, 18, 18),
     new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   const mid = new THREE.Mesh(
-    new THREE.SphereGeometry(1.08, 24, 24),
+    new THREE.SphereGeometry(0.22, 18, 18),
     new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 22), new THREE.MeshBasicMaterial({ color: coreColor }));
-  const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), new THREE.MeshBasicMaterial({ color: coreColor }));
+  const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.038, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   coreGroup.add(outer, mid, core, highlight);
   coreGroup.userData = { outer, mid, core, highlight, phase: 0.4 };
   galaxyRoot.add(coreGroup);
@@ -982,13 +1029,13 @@ function buildCore(snapshot) {
     <span class="core-label-state">${escapeHtml(stock.action || "READ-ONLY")}</span>
   `;
   coreLabel = new CSS2DObject(labelElement);
-  coreLabel.position.set(0, -1.1, 0);
+  coreLabel.position.set(0, -0.54, 0);
   coreGroup.add(coreLabel);
 }
 
 function createSelectedRing() {
   selectedRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.72, 0.77, 48),
+    new THREE.RingGeometry(0.27, 0.31, 40),
     new THREE.MeshBasicMaterial({ color: 0xd1a5ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
   );
   selectedRing.visible = false;
@@ -1042,15 +1089,20 @@ function updateNodeAnimation(time) {
       }
     }
     object.visible = true;
-    const pulse = 1 + Math.sin(time * object.userData.speed + object.userData.phase) * 0.08;
+    const activeSignal = object.userData.signalActive === true;
+    const oscillation = Math.sin(time * object.userData.speed + object.userData.phase);
+    const pulse = 1 + oscillation * (activeSignal ? 0.22 : 0.025);
+    const glowVisibility = activeSignal
+      ? 0.62 + (Math.sin(time * object.userData.speed * 1.65 + object.userData.phase) + 1) * 0.19
+      : 1;
     glow.scale.setScalar(pulse);
-    halo.scale.setScalar(1 + (pulse - 1) * 0.55);
+    halo.scale.setScalar(1 + (pulse - 1) * 0.62);
     object.rotation.y += 0.0008;
     object.scale.setScalar((object.userData.selected ? 1.16 : 1) * transitionScale);
     label.element.style.opacity = String(visibility);
     for (const mesh of [glow, halo, body, core]) {
       const baseOpacity = mesh.material?.userData?.baseOpacity;
-      if (typeof baseOpacity === "number") mesh.material.opacity = baseOpacity * visibility;
+      if (typeof baseOpacity === "number") mesh.material.opacity = baseOpacity * visibility * glowVisibility;
     }
     if (criticalEffect) {
       const cycle = ((time + criticalEffect.userData.phase) % 8.5) / 8.5;
@@ -1453,6 +1505,73 @@ function renderSummary(snapshot) {
   }
 }
 
+function renderTradePlan(trade, snapshot) {
+  const rawTimeframe = trade?.timeframe;
+  const timeframe = rawTimeframe && typeof rawTimeframe === "object"
+    ? rawTimeframe
+    : snapshot?.short_horizon?.timeframe_contract || {};
+  const selected = String(timeframe.selected || snapshot?.short_horizon?.active_timeframe || "1D").toUpperCase();
+  const fallbackProfiles = [
+    { timeframe: "1D", label: "Daily", role_label: "บริบท + สัญญาณ", data_available: true },
+    { timeframe: "1H", label: "1 Hour", role_label: "สร้าง setup", data_available: false },
+    { timeframe: "15M", label: "15 Minute", role_label: "ยืนยัน trigger", data_available: false },
+    { timeframe: "5M", label: "5 Minute", role_label: "เก็บจังหวะ execution", data_available: false },
+  ];
+  const profiles = Array.isArray(timeframe.profiles) && timeframe.profiles.length
+    ? timeframe.profiles
+    : fallbackProfiles;
+  const activeProfile = timeframe.active_profile || profiles.find((item) => String(item?.timeframe || "").toUpperCase() === selected) || profiles[0];
+  dom.tradeTimeframe.textContent = `${selected} · ${String(activeProfile?.label || selected).toUpperCase()}`;
+  dom.tradeTimeframeList.replaceChildren();
+  for (const profile of profiles) {
+    const key = String(profile?.timeframe || "").toUpperCase();
+    if (!key) continue;
+    const available = profile.data_available === true;
+    const pill = document.createElement("span");
+    pill.className = `timeframe-pill ${key === selected ? "is-active" : ""} ${available ? "is-available" : "is-pending"}`;
+    pill.title = available
+      ? `${profile.role_label || profile.role || "available"} · data available`
+      : `${profile.role_label || profile.role || "pending"} · intraday feed required`;
+    pill.innerHTML = `<b>${escapeHtml(key)}</b><small>${escapeHtml(available ? "READY" : "PENDING")}</small>`;
+    dom.tradeTimeframeList.append(pill);
+  }
+
+  const plan = trade?.plan && typeof trade.plan === "object"
+    ? trade.plan
+    : snapshot?.short_horizon?.trade_plan || {};
+  const status = String(plan.status || "unavailable").toLowerCase();
+  const statusLabels = {
+    risk_gate_review: "PAPER · RISK GATE",
+    exit_review: "PAPER · EXIT REVIEW",
+    blocked: "BLOCKED · EXECUTION",
+    blocked_geometry: "BLOCKED · GEOMETRY",
+    unavailable: "NO MAP",
+  };
+  dom.tradePlanStatus.textContent = statusLabels[status] || String(plan.status_label || status).toUpperCase();
+  dom.tradePlan.className = `trade-plan ${status === "risk_gate_review" || status === "exit_review" ? "is-ready" : status === "blocked" || status === "blocked_geometry" ? "is-blocked" : "is-unavailable"}`;
+
+  const levels = plan.levels || {};
+  const entryZone = plan.entry_zone || {};
+  const entryLower = numberOrNull(entryZone.lower);
+  const entryUpper = numberOrNull(entryZone.upper);
+  dom.tradeEntryZone.textContent = entryLower !== null && entryUpper !== null
+    ? `${formatPrice(entryLower)}–${formatPrice(entryUpper)}`
+    : "--";
+  dom.tradeInvalidation.textContent = formatPrice(levels.invalidation?.price);
+  dom.tradeTarget.textContent = formatPrice(levels.target?.price);
+  const horizon = numberOrNull(plan.time_rule?.horizon_days);
+  const remaining = numberOrNull(plan.time_rule?.remaining_days);
+  dom.tradeTimeStop.textContent = horizon === null
+    ? "--"
+    : `${horizon.toFixed(0)}D${remaining === null ? "" : ` · ${remaining.toFixed(0)}D left`}`;
+  dom.tradeRiskReward.textContent = formatPlanMultiple(plan.risk?.reward_risk);
+  dom.tradeEv.textContent = formatPlanPercent(plan.risk?.ev_net_pct);
+  dom.tradePlanNote.textContent = plan.note
+    || (status === "unavailable"
+      ? "ยังไม่มีระดับ entry/target/invalidation ที่ประกาศจาก Short Horizon"
+      : "Trade Map เป็นภาพอธิบายเท่านั้น และยังต้องผ่าน Risk Gate");
+}
+
 function renderTrade(snapshot) {
   const trade = snapshot.trade || {};
   const tags = Array.isArray(trade.tags) ? trade.tags.slice(0, MAX_VISIBLE_TRADE_TAGS) : [];
@@ -1475,10 +1594,12 @@ function renderTrade(snapshot) {
       const row = document.createElement("div");
       row.className = `trade-tag ${tag.hard_blocker ? "is-blocker" : ""}`;
       row.title = tag.reason || "";
+      const tagWeight = numberOrNull(tag.timeframe_weight_pct);
+      const weightText = tagWeight === null ? "W--" : `W${tagWeight.toFixed(0)}%`;
       row.innerHTML = `
         <span class="trade-tag-dot ${escapeHtml(polarity)}"></span>
         <span>${escapeHtml(tag.label || tag.code || "Trade factor")}</span>
-        <strong>${escapeHtml(formatScore(tag.score))}</strong>
+        <strong>${escapeHtml(formatScore(tag.score))} · ${escapeHtml(weightText)}</strong>
       `;
       dom.tradeTagList.append(row);
     }
@@ -1488,6 +1609,7 @@ function renderTrade(snapshot) {
   dom.tradeGateNote.querySelector("span").textContent = available
     ? `${risk.status === "not_evaluated" ? "ยังไม่ประเมินข้อมูลบัญชี/พอร์ต" : risk.status}${missing ? ` · ขาด ${missing} field` : ""}`
     : "ApexView แสดงผลเท่านั้น และยังไม่มี execution context สำหรับ Risk Gate";
+  renderTradePlan(trade, snapshot);
 }
 
 function stopTimelinePlayback() {
