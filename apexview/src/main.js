@@ -6,16 +6,24 @@ import {
   Bell,
   BrainCircuit,
   CalendarDays,
+  CandlestickChart,
+  ChartNoAxesCombined,
   CircleHelp,
   List,
+  LockKeyhole,
   Maximize2,
   MousePointer2,
   Network,
   Orbit,
+  Pause,
+  Play,
   RefreshCw,
   RotateCcw,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
+  SkipBack,
+  SkipForward,
   TriangleAlert,
   X,
   ZoomIn,
@@ -24,10 +32,42 @@ import {
 } from "lucide";
 import "./styles.css";
 
+const APP_ICONS = {
+  Activity,
+  Bell,
+  BrainCircuit,
+  CalendarDays,
+  CandlestickChart,
+  ChartNoAxesCombined,
+  CircleHelp,
+  List,
+  LockKeyhole,
+  Maximize2,
+  MousePointer2,
+  Network,
+  Orbit,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  ShieldAlert,
+  ShieldCheck,
+  SkipBack,
+  SkipForward,
+  TriangleAlert,
+  X,
+  ZoomIn,
+  ZoomOut,
+};
+
 const SNAPSHOT_VERSION = "APEXVIEW-SNAPSHOT-v1.0";
 const UNIVERSE_VERSION = "APEXVIEW-UNIVERSE-v1.0";
+const MARKET_CHART_VERSION = "APEXVIEW-MARKET-CHART-v1.0";
+const TIMELINE_VERSION = "APEXVIEW-EVIDENCE-TIMELINE-v1.0";
 const DEFAULT_TICKER = "RKLB";
 const MAX_RENDER_TAGS = 80;
+const MAX_VISIBLE_TRADE_TAGS = 6;
 
 const DEFAULT_MANIFEST = {
   contract_version: UNIVERSE_VERSION,
@@ -62,6 +102,12 @@ const state = {
   frame: 0,
   lastLabelLayoutAt: 0,
   cameraReady: false,
+  chartRange: "3M",
+  chartHoverIndex: -1,
+  timelineEvents: [],
+  timelineIndex: -1,
+  timelineTimer: null,
+  timelinePlaying: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -90,6 +136,7 @@ const dom = {
   cautionCount: $("#caution-count"),
   neutralCount: $("#neutral-count"),
   criticalCount: $("#critical-count"),
+  tradeCount: $("#trade-count"),
   eventCount: $("#event-count"),
   eventList: $("#event-list"),
   timelineStatus: $("#timeline-status"),
@@ -105,6 +152,22 @@ const dom = {
   detailChain: $("#detail-chain"),
   detailFacts: $("#detail-facts"),
   clock: $("#runtime-clock"),
+  workspace: $("#workspace"),
+  marketChart: $("#market-chart"),
+  chartWrap: $("#chart-wrap"),
+  chartTooltip: $("#chart-tooltip"),
+  chartEmpty: $("#chart-empty"),
+  chartInterval: $("#chart-interval"),
+  chartSource: $("#chart-source"),
+  chartLast: $("#chart-last"),
+  chartChange: $("#chart-change"),
+  chartRangeStat: $("#chart-range-stat"),
+  tradeStatus: $("#trade-status"),
+  tradeBalance: $("#trade-balance"),
+  tradeCoverage: $("#trade-coverage"),
+  tradeTagList: $("#trade-tag-list"),
+  tradeGateNote: $("#trade-gate-note"),
+  timelinePlay: $("#timeline-play"),
 };
 
 let scene;
@@ -182,6 +245,245 @@ function formatShortDate(timestamp) {
   }).format(new Date(value * 1000));
 }
 
+function formatCompactNumber(value, maximumFractionDigits = 1) {
+  const number = numberOrNull(value);
+  if (number === null) return "--";
+  return new Intl.NumberFormat("en-US", {
+    notation: Math.abs(number) >= 10_000 ? "compact" : "standard",
+    maximumFractionDigits,
+  }).format(number);
+}
+
+function chartRangePoints(chart, rangeKey) {
+  const points = Array.isArray(chart?.points) ? chart.points : [];
+  const range = (chart?.ranges || []).find((item) => item?.key === rangeKey);
+  const bars = Math.max(1, Number(range?.bars || points.length || 1));
+  return points.slice(-bars);
+}
+
+function chartLevelData(snapshot) {
+  const short = snapshot?.short_horizon || {};
+  return [
+    { key: "ENTRY", value: numberOrNull(short.entry_price), color: "#f4ca7a" },
+    { key: "TARGET", value: numberOrNull(short.target_price), color: "#61e6b1" },
+    { key: "STOP", value: numberOrNull(short.invalidation_price), color: "#ff8d7e" },
+  ].filter((item) => item.value !== null && item.value > 0);
+}
+
+function selectedChartPoints() {
+  return chartRangePoints(state.snapshot?.market_chart, state.chartRange);
+}
+
+function chartCoordinates(points, width, height, levels) {
+  const padding = { left: 14, right: 58, top: 10, bottom: 24 };
+  const volumeHeight = Math.max(24, height * 0.19);
+  const plotBottom = height - padding.bottom - volumeHeight - 9;
+  const plotHeight = Math.max(38, plotBottom - padding.top);
+  const values = points.flatMap((point) => [point.low, point.high, point.close].map(numberOrNull).filter((value) => value !== null));
+  values.push(...levels.map((level) => level.value));
+  let minimum = Math.min(...values);
+  let maximum = Math.max(...values);
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return null;
+  const span = Math.max(maximum - minimum, Math.abs(maximum) * 0.01, 0.01);
+  minimum -= span * 0.08;
+  maximum += span * 0.08;
+  const innerWidth = Math.max(1, width - padding.left - padding.right);
+  const x = (index) => padding.left + (points.length <= 1 ? innerWidth / 2 : (index / (points.length - 1)) * innerWidth);
+  const y = (value) => padding.top + ((maximum - value) / (maximum - minimum)) * plotHeight;
+  return { padding, volumeHeight, plotBottom, plotHeight, minimum, maximum, innerWidth, x, y };
+}
+
+function drawChartGrid(context, coordinates, width, height) {
+  context.save();
+  context.strokeStyle = "rgba(180, 211, 228, 0.075)";
+  context.fillStyle = "rgba(117, 136, 150, 0.82)";
+  context.lineWidth = 1;
+  context.font = '9px "Noto Sans Thai", Inter, sans-serif';
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  for (let index = 0; index <= 4; index += 1) {
+    const ratio = index / 4;
+    const y = coordinates.padding.top + coordinates.plotHeight * ratio;
+    context.beginPath();
+    context.moveTo(coordinates.padding.left, Math.round(y) + 0.5);
+    context.lineTo(width - coordinates.padding.right, Math.round(y) + 0.5);
+    context.stroke();
+    const price = coordinates.maximum - (coordinates.maximum - coordinates.minimum) * ratio;
+    context.fillText(formatCompactNumber(price, 2), width - coordinates.padding.right + 7, y);
+  }
+  context.beginPath();
+  context.moveTo(coordinates.padding.left, coordinates.plotBottom + 9.5);
+  context.lineTo(width - coordinates.padding.right, coordinates.plotBottom + 9.5);
+  context.stroke();
+  context.restore();
+}
+
+function drawChartLevels(context, coordinates, width, levels) {
+  context.save();
+  context.font = '8px "Noto Sans Thai", Inter, sans-serif';
+  context.textAlign = "right";
+  context.textBaseline = "bottom";
+  context.setLineDash([4, 5]);
+  for (const level of levels) {
+    const y = coordinates.y(level.value);
+    context.strokeStyle = `${level.color}88`;
+    context.fillStyle = level.color;
+    context.beginPath();
+    context.moveTo(coordinates.padding.left, Math.round(y) + 0.5);
+    context.lineTo(width - coordinates.padding.right, Math.round(y) + 0.5);
+    context.stroke();
+    context.fillText(`${level.key} ${formatCompactNumber(level.value, 2)}`, width - coordinates.padding.right - 4, y - 2);
+  }
+  context.restore();
+}
+
+function drawMarketChart() {
+  const canvas = dom.marketChart;
+  const wrap = dom.chartWrap;
+  if (!canvas || !wrap || !state.snapshot) return;
+  const chart = state.snapshot.market_chart || {};
+  const points = selectedChartPoints();
+  const cssWidth = Math.floor(wrap.clientWidth);
+  const cssHeight = Math.floor(wrap.clientHeight);
+  if (cssWidth < 40 || cssHeight < 40) return;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.floor(cssWidth * ratio));
+  canvas.height = Math.max(1, Math.floor(cssHeight * ratio));
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  const context = canvas.getContext("2d");
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  dom.chartEmpty.hidden = points.length > 0;
+  if (!points.length) return;
+
+  const levels = chartLevelData(state.snapshot);
+  const coordinates = chartCoordinates(points, cssWidth, cssHeight, levels);
+  if (!coordinates) return;
+  drawChartGrid(context, coordinates, cssWidth, cssHeight);
+  drawChartLevels(context, coordinates, cssWidth, levels);
+  const xStep = points.length > 1 ? coordinates.innerWidth / (points.length - 1) : coordinates.innerWidth;
+  const candleCoverage = Number(chart.coverage?.complete_candle_pct || 0);
+  const drawCandles = candleCoverage >= 75 && xStep >= 2.4;
+  const maxVolume = Math.max(1, ...points.map((point) => numberOrNull(point.volume) || 0));
+  const volumeTop = coordinates.plotBottom + 13;
+  const volumeBottom = cssHeight - coordinates.padding.bottom;
+
+  context.save();
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const x = coordinates.x(index);
+    const volume = numberOrNull(point.volume);
+    if (volume !== null) {
+      const height = (volume / maxVolume) * Math.max(1, volumeBottom - volumeTop);
+      const previousClose = numberOrNull(points[Math.max(0, index - 1)]?.close) || point.close;
+      context.fillStyle = point.close >= previousClose ? "rgba(97, 230, 177, 0.22)" : "rgba(255, 141, 126, 0.20)";
+      context.fillRect(x - Math.max(0.5, xStep * 0.27), volumeBottom - height, Math.max(1, xStep * 0.54), height);
+    }
+  }
+  context.restore();
+
+  if (drawCandles) {
+    const bodyWidth = Math.max(1.2, Math.min(8, xStep * 0.58));
+    for (let index = 0; index < points.length; index += 1) {
+      const point = points[index];
+      const open = numberOrNull(point.open);
+      const high = numberOrNull(point.high);
+      const low = numberOrNull(point.low);
+      const close = numberOrNull(point.close);
+      if ([open, high, low, close].some((value) => value === null)) continue;
+      const rising = close >= open;
+      const color = rising ? "#61e6b1" : "#ff8d7e";
+      const x = coordinates.x(index);
+      const openY = coordinates.y(open);
+      const closeY = coordinates.y(close);
+      context.strokeStyle = color;
+      context.fillStyle = rising ? "rgba(97, 230, 177, 0.74)" : "rgba(255, 141, 126, 0.74)";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(x, coordinates.y(high));
+      context.lineTo(x, coordinates.y(low));
+      context.stroke();
+      context.fillRect(x - bodyWidth / 2, Math.min(openY, closeY), bodyWidth, Math.max(1, Math.abs(closeY - openY)));
+    }
+  } else {
+    context.save();
+    context.strokeStyle = "#61e6b1";
+    context.lineWidth = 1.35;
+    context.lineJoin = "round";
+    context.lineCap = "round";
+    context.beginPath();
+    points.forEach((point, index) => {
+      const x = coordinates.x(index);
+      const y = coordinates.y(point.close);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    context.restore();
+  }
+
+  const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+  context.save();
+  context.fillStyle = "rgba(117, 136, 150, 0.82)";
+  context.font = '8px "Noto Sans Thai", Inter, sans-serif';
+  context.textBaseline = "bottom";
+  for (const index of labelIndexes) {
+    const point = points[index];
+    const date = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short" }).format(new Date(point.ts * 1000));
+    context.textAlign = index === 0 ? "left" : index === points.length - 1 ? "right" : "center";
+    context.fillText(date, coordinates.x(index), cssHeight - 2);
+  }
+  context.restore();
+
+  const hoverIndex = Math.max(-1, Math.min(points.length - 1, state.chartHoverIndex));
+  if (hoverIndex >= 0) {
+    const point = points[hoverIndex];
+    const x = coordinates.x(hoverIndex);
+    const y = coordinates.y(point.close);
+    context.save();
+    context.strokeStyle = "rgba(217, 229, 237, 0.25)";
+    context.setLineDash([3, 4]);
+    context.beginPath();
+    context.moveTo(x, coordinates.padding.top);
+    context.lineTo(x, volumeBottom);
+    context.moveTo(coordinates.padding.left, y);
+    context.lineTo(cssWidth - coordinates.padding.right, y);
+    context.stroke();
+    context.fillStyle = "#effff8";
+    context.beginPath();
+    context.arc(x, y, 2.5, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+}
+
+function renderMarketChart(snapshot) {
+  const chart = snapshot.market_chart || {};
+  const availableRanges = new Set((chart.ranges || []).filter((item) => item?.available).map((item) => item.key));
+  if (!availableRanges.has(state.chartRange)) state.chartRange = availableRanges.has(chart.default_range) ? chart.default_range : "ALL";
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    button.disabled = !availableRanges.has(button.dataset.chartRange);
+    button.classList.toggle("is-active", button.dataset.chartRange === state.chartRange);
+  });
+  const source = chart.source || {};
+  dom.chartInterval.textContent = `${String(chart.interval || "1D").toUpperCase()} · ${chart.coverage?.points || 0} BARS`;
+  dom.chartSource.textContent = `${source.name || "ไม่มีแหล่งข้อมูล"}${source.market_as_of ? ` · as of ${formatShortDate(source.market_as_of)}` : ""}`;
+  const points = selectedChartPoints();
+  const first = points[0];
+  const last = points.at(-1);
+  const change = first && last && first.close ? ((last.close / first.close) - 1) * 100 : null;
+  const lows = points.map((point) => numberOrNull(point.low) ?? numberOrNull(point.close)).filter((value) => value !== null);
+  const highs = points.map((point) => numberOrNull(point.high) ?? numberOrNull(point.close)).filter((value) => value !== null);
+  dom.chartLast.textContent = last ? formatPrice(last.close) : "--";
+  dom.chartChange.textContent = change === null ? "--" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+  dom.chartChange.className = change === null ? "" : change >= 0 ? "is-positive" : "is-negative";
+  dom.chartRangeStat.textContent = lows.length && highs.length ? `${formatCompactNumber(Math.min(...lows), 2)}–${formatCompactNumber(Math.max(...highs), 2)}` : "--";
+  state.chartHoverIndex = -1;
+  dom.chartTooltip.hidden = true;
+  drawMarketChart();
+}
+
 function labelForGroup(group) {
   const labels = {
     core: "Core",
@@ -194,6 +496,7 @@ function labelForGroup(group) {
     entry: "Entry",
     product: "Product",
     event: "Event",
+    trade: "Trade",
     unknown: "Unclassified",
   };
   return labels[String(group || "unknown").toLowerCase()] || String(group || "Unclassified");
@@ -246,6 +549,15 @@ function validateSnapshot(payload, ticker) {
   const snapshotTicker = String(payload.stock?.ticker || "").toUpperCase();
   if (!snapshotTicker || snapshotTicker !== ticker) throw new Error("Snapshot ticker does not match selector");
   if (payload.read_only !== true) throw new Error("Snapshot is not marked read-only");
+  if (payload.market_chart && (payload.market_chart.version !== MARKET_CHART_VERSION || payload.market_chart.read_only !== true)) {
+    throw new Error("Unsupported market-chart contract");
+  }
+  if (payload.evidence_timeline && (payload.evidence_timeline.version !== TIMELINE_VERSION || payload.evidence_timeline.read_only !== true)) {
+    throw new Error("Unsupported evidence-timeline contract");
+  }
+  if (payload.trade?.execution_authority === true || payload.trade?.weight_impact_pct) {
+    throw new Error("Trade projection violates read-only boundary");
+  }
   return payload;
 }
 
@@ -565,9 +877,10 @@ function createTagObject(node, position, maxAbsScore, random) {
 
   const direction = position.clone().normalize();
   const label = new CSS2DObject(makeLabel(node, `#${color.getHexString()}`));
-  label.position.copy(direction.multiplyScalar(0.56 + radius * 0.5));
+  label.position.copy(position).add(direction.multiplyScalar(0.56 + radius * 0.5));
   label.position.y += 0.08;
-  group.add(label);
+  // Keep labels in a stable screen-space anchor while the visual star pulses.
+  tagLayer.add(label);
   const criticalEffect = node.critical ? createCriticalEffect(node, radius, random) : null;
   if (criticalEffect) group.add(criticalEffect);
   group.userData.parts = { glow, halo, body, core, label, criticalEffect };
@@ -582,8 +895,24 @@ function createTagObject(node, position, maxAbsScore, random) {
   return group;
 }
 
+function renderNodes(snapshot) {
+  const nodes = [];
+  const seen = new Set();
+  for (const raw of [...(snapshot.nodes || []), ...(snapshot.trade?.tags || [])]) {
+    const node = raw && typeof raw === "object" ? { ...raw } : null;
+    const viewId = String(node?.view_id || "");
+    if (!node || !viewId || seen.has(viewId)) continue;
+    seen.add(viewId);
+    node.critical = Boolean(node.critical);
+    node.lifecycle = node.lifecycle || { state: "active", change: "unknown" };
+    node.hidden = node.hidden || { state: "normal" };
+    nodes.push(node);
+  }
+  return nodes;
+}
+
 function buildTags(snapshot) {
-  const nodes = (snapshot.nodes || [])
+  const nodes = renderNodes(snapshot)
     .filter((node) => node?.lifecycle?.state !== "inactive" || node?.lifecycle?.change === "disappeared")
     .slice(0, MAX_RENDER_TAGS);
   const maxAbsScore = Math.max(1, ...nodes.map((node) => Math.abs(numberOrNull(node.score) || 0)));
@@ -768,8 +1097,74 @@ function rectanglesOverlap(left, right, padding = 4) {
   );
 }
 
+function resolveMobileLabelPacking(stageRect, labels) {
+  // Keep enough spare slots to avoid the central ticker without turning the
+  // mobile view into a pile of overlapping labels.
+  const columns = 4;
+  const rows = Math.max(6, Math.ceil((labels.length + 1) / columns));
+  const columnGap = 10;
+  const rowGap = 6;
+  const horizontalInset = 6;
+  const verticalInsetTop = 51;
+  const verticalInsetBottom = 54;
+  const slotWidth = (stageRect.width - horizontalInset * 2 - columnGap * (columns - 1)) / columns;
+  const slotHeight = (stageRect.height - verticalInsetTop - verticalInsetBottom - rowGap * (rows - 1)) / rows;
+  const slots = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      slots.push({
+        left: stageRect.left + horizontalInset + column * (slotWidth + columnGap),
+        top: stageRect.top + verticalInsetTop + row * (slotHeight + rowGap),
+        width: slotWidth,
+        height: slotHeight,
+      });
+    }
+  }
+  const coreRect = coreLabel?.element?.getBoundingClientRect?.();
+  const protectedCore = coreRect && {
+    left: coreRect.left - 4,
+    right: coreRect.right + 4,
+    top: coreRect.top - 4,
+    bottom: coreRect.bottom + 4,
+  };
+  const available = slots.filter((slot) => {
+    if (!protectedCore) return true;
+    return !rectanglesOverlap(
+      { left: slot.left, right: slot.left + slot.width, top: slot.top, bottom: slot.top + slot.height },
+      protectedCore,
+      0,
+    );
+  });
+  const fallbackSlots = available.length >= labels.length ? available : slots;
+  const used = new Set();
+  for (const item of labels) {
+    const current = item.element.getBoundingClientRect();
+    const currentCenter = { x: current.left + current.width / 2, y: current.top + current.height / 2 };
+    const candidates = fallbackSlots
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ index }) => !used.has(index))
+      .sort((left, right) => {
+        const leftCenter = { x: left.slot.left + left.slot.width / 2, y: left.slot.top + left.slot.height / 2 };
+        const rightCenter = { x: right.slot.left + right.slot.width / 2, y: right.slot.top + right.slot.height / 2 };
+        const leftDistance = Math.hypot(leftCenter.x - currentCenter.x, leftCenter.y - currentCenter.y);
+        const rightDistance = Math.hypot(rightCenter.x - currentCenter.x, rightCenter.y - currentCenter.y);
+        return leftDistance - rightDistance;
+      });
+    const choice = candidates[0];
+    if (!choice) continue;
+    used.add(choice.index);
+    const desiredLeft = choice.slot.left + Math.max(0, (choice.slot.width - current.width) / 2);
+    const desiredTop = choice.slot.top + Math.max(0, (choice.slot.height - current.height) / 2);
+    const currentMarginLeft = Number.parseFloat(item.element.style.marginLeft) || 0;
+    const currentMarginTop = Number.parseFloat(item.element.style.marginTop) || 0;
+    item.element.style.marginLeft = `${currentMarginLeft + desiredLeft - current.left}px`;
+    item.element.style.marginTop = `${currentMarginTop + desiredTop - current.top}px`;
+  }
+}
+
 function resolveLabelOverlaps() {
   if (!labelRenderer) return;
+  const stageRect = dom.galaxy.getBoundingClientRect();
   const occupied = [];
   if (coreLabel?.element && coreLabel.element.getBoundingClientRect().width > 0) {
     const rect = coreLabel.element.getBoundingClientRect();
@@ -790,28 +1185,57 @@ function resolveLabelOverlaps() {
       const rightScore = Math.abs(numberOrNull(right.node.score) || 0);
       return rightScore - leftScore;
     });
-  const offsets = [
-    [0, 0], [18, 0], [-18, 0], [0, 18], [0, -18],
-    [30, 12], [-30, 12], [30, -12], [-30, -12],
-    [48, 0], [-48, 0], [0, 34], [0, -34],
-  ];
+  if (stageRect.width < 760) {
+    resolveMobileLabelPacking(stageRect, labels);
+    return;
+  }
+  const offsets = [];
+  const maxOffset = stageRect.width < 760 ? 216 : 144;
+  for (let radius = 0; radius <= maxOffset; radius += 18) {
+    if (radius === 0) {
+      offsets.push([0, 0]);
+      continue;
+    }
+    for (let y = -radius; y <= radius; y += 18) {
+      for (let x = -radius; x <= radius; x += 18) {
+        if (Math.max(Math.abs(x), Math.abs(y)) !== radius) continue;
+        offsets.push([x, y]);
+      }
+    }
+  }
   for (const item of labels) {
     item.element.style.marginLeft = "0px";
     item.element.style.marginTop = "0px";
     let chosen = item.element.getBoundingClientRect();
     let chosenOffset = [0, 0];
-    let bestOverlap = Number.POSITIVE_INFINITY;
+    let bestScore = Number.POSITIVE_INFINITY;
     for (const [x, y] of offsets) {
       item.element.style.marginLeft = `${x}px`;
       item.element.style.marginTop = `${y}px`;
       const candidate = item.element.getBoundingClientRect();
-      const overlap = occupied.reduce((total, rect) => total + (rectanglesOverlap(candidate, rect) ? 1 : 0), 0);
-      if (overlap < bestOverlap) {
-        bestOverlap = overlap;
-        chosen = candidate;
-        chosenOffset = [x, y];
+      let clampedX = x;
+      let clampedY = y;
+      if (candidate.left < stageRect.left + 6) clampedX += stageRect.left + 6 - candidate.left;
+      if (candidate.right > stageRect.right - 6) clampedX -= candidate.right - (stageRect.right - 6);
+      if (candidate.top < stageRect.top + 6) clampedY += stageRect.top + 6 - candidate.top;
+      if (candidate.bottom > stageRect.bottom - 6) clampedY -= candidate.bottom - (stageRect.bottom - 6);
+      item.element.style.marginLeft = `${clampedX}px`;
+      item.element.style.marginTop = `${clampedY}px`;
+      const clampedCandidate = item.element.getBoundingClientRect();
+      const overlap = occupied.reduce((total, rect) => total + (rectanglesOverlap(clampedCandidate, rect) ? 1 : 0), 0);
+      const outOfBounds = [
+        clampedCandidate.left < stageRect.left + 6,
+        clampedCandidate.right > stageRect.right - 6,
+        clampedCandidate.top < stageRect.top + 6,
+        clampedCandidate.bottom > stageRect.bottom - 6,
+      ].filter(Boolean).length;
+      const score = overlap * 10000 + outOfBounds * 1000 + Math.abs(clampedX) + Math.abs(clampedY) * 0.8;
+      if (score < bestScore) {
+        bestScore = score;
+        chosen = clampedCandidate;
+        chosenOffset = [clampedX, clampedY];
       }
-      if (overlap === 0) break;
+      if (overlap === 0 && outOfBounds === 0) break;
     }
     item.element.style.marginLeft = `${chosenOffset[0]}px`;
     item.element.style.marginTop = `${chosenOffset[1]}px`;
@@ -836,7 +1260,7 @@ function animate() {
   controls?.update();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
-  if (state.frame % 8 === 0 && time - state.lastLabelLayoutAt > 0.12) {
+  if (state.frame % 4 === 0 && time - state.lastLabelLayoutAt > 0.06) {
     resolveLabelOverlaps();
     state.lastLabelLayoutAt = time;
   }
@@ -886,6 +1310,11 @@ function resizeScene() {
   const height = dom.galaxy.clientHeight || 1;
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  if (galaxyRoot) {
+    const portraitScale = Math.min(1, Math.max(0.58, width / 620));
+    galaxyRoot.scale.setScalar(width < 760 ? portraitScale : 1);
+  }
+  if (controls) controls.autoRotateSpeed = width < 760 ? 0.025 : 0.08;
   renderer.setSize(width, height, false);
   labelRenderer.setSize(width, height);
 }
@@ -996,6 +1425,7 @@ function renderDetail(node) {
 function renderSummary(snapshot) {
   const stock = snapshot.stock || {};
   const counts = snapshot.counts || {};
+  const tradeCount = Array.isArray(snapshot.trade?.tags) ? snapshot.trade.tags.length : 0;
   dom.ticker.textContent = stock.ticker || "--";
   dom.stockName.textContent = stock.name || `${stock.ticker || "Stock"} · read-only evidence field`;
   dom.price.textContent = formatPrice(stock.price);
@@ -1006,43 +1436,152 @@ function renderSummary(snapshot) {
   dom.marketTime.textContent = formatDate(snapshot.as_of?.market_ts);
   dom.logicVersion.textContent = snapshot.logic_version || "ไม่ระบุ";
   dom.sourceContract.textContent = snapshot.contract_version || SNAPSHOT_VERSION;
-  dom.activeCount.textContent = `${counts.active || 0} ACTIVE`;
+  dom.activeCount.textContent = `${counts.active || 0} TAG · ${tradeCount} TRADE`;
   dom.positiveCount.textContent = counts.positive || 0;
   dom.negativeCount.textContent = counts.negative || 0;
   dom.cautionCount.textContent = counts.caution || 0;
   dom.neutralCount.textContent = counts.neutral || 0;
   dom.criticalCount.textContent = counts.critical || 0;
+  dom.tradeCount.textContent = tradeCount;
   dom.fixtureBadge.hidden = selectedManifestItem(stock.ticker)?.kind !== "test_fixture";
   if (dom.timelineStatus) {
-    const timeline = snapshot.timeline || {};
-    const appeared = Array.isArray(timeline.appeared) ? timeline.appeared.length : 0;
-    const disappeared = Array.isArray(timeline.disappeared) ? timeline.disappeared.length : 0;
+    const timeline = snapshot.evidence_timeline || snapshot.timeline || {};
+    const eventCount = Array.isArray(timeline.events) ? timeline.events.length : 0;
     dom.timelineStatus.textContent = timeline.comparison_available
-      ? `LIFECYCLE · +${appeared} / -${disappeared}`
-      : "LIFECYCLE · BASELINE";
+      ? `EVIDENCE · ${eventCount} EVENTS`
+      : `EVIDENCE · ${eventCount ? `${eventCount} BASELINE` : "BASELINE"}`;
   }
 }
 
+function renderTrade(snapshot) {
+  const trade = snapshot.trade || {};
+  const tags = Array.isArray(trade.tags) ? trade.tags.slice(0, MAX_VISIBLE_TRADE_TAGS) : [];
+  const available = trade.available === true;
+  const balance = numberOrNull(trade.weighted_balance);
+  dom.tradeCount.textContent = Array.isArray(trade.tags) ? trade.tags.length : 0;
+  dom.tradeStatus.textContent = available ? trade.status_label || trade.status || "REVIEW" : "UNAVAILABLE";
+  dom.tradeStatus.className = `trade-status ${trade.status === "ready_for_external_risk_gate" ? "is-ready" : trade.status === "blocked" ? "is-blocked" : ""}`;
+  dom.tradeBalance.textContent = balance === null ? "--" : `${balance > 0 ? "+" : ""}${balance.toFixed(2)}`;
+  dom.tradeCoverage.textContent = available ? `${Number(trade.coverage?.pct || 0).toFixed(0)}%` : "--";
+  dom.tradeTagList.replaceChildren();
+  if (!tags.length) {
+    const empty = document.createElement("span");
+    empty.className = "trade-tag-empty";
+    empty.textContent = "ยังไม่มี execution factors ที่ผ่าน contract";
+    dom.tradeTagList.append(empty);
+  } else {
+    for (const tag of tags) {
+      const polarity = normalizePolarity(tag.polarity);
+      const row = document.createElement("div");
+      row.className = `trade-tag ${tag.hard_blocker ? "is-blocker" : ""}`;
+      row.title = tag.reason || "";
+      row.innerHTML = `
+        <span class="trade-tag-dot ${escapeHtml(polarity)}"></span>
+        <span>${escapeHtml(tag.label || tag.code || "Trade factor")}</span>
+        <strong>${escapeHtml(formatScore(tag.score))}</strong>
+      `;
+      dom.tradeTagList.append(row);
+    }
+  }
+  const risk = trade.external_risk_gate || {};
+  const missing = Array.isArray(trade.missing_inputs) ? trade.missing_inputs.length : 0;
+  dom.tradeGateNote.querySelector("span").textContent = available
+    ? `${risk.status === "not_evaluated" ? "ยังไม่ประเมินข้อมูลบัญชี/พอร์ต" : risk.status}${missing ? ` · ขาด ${missing} field` : ""}`
+    : "ApexView แสดงผลเท่านั้น และยังไม่มี execution context สำหรับ Risk Gate";
+}
+
+function stopTimelinePlayback() {
+  if (state.timelineTimer) window.clearInterval(state.timelineTimer);
+  state.timelineTimer = null;
+  state.timelinePlaying = false;
+  dom.timelinePlay?.classList.remove("is-playing");
+  if (dom.timelinePlay) {
+    dom.timelinePlay.innerHTML = '<i data-lucide="play"></i>';
+    dom.timelinePlay.setAttribute("aria-label", "Play timeline");
+    dom.timelinePlay.dataset.tooltip = "Play";
+    createIcons({ icons: APP_ICONS });
+  }
+}
+
+function setTimelineIndex(index, { inspect = true } = {}) {
+  if (!state.timelineEvents.length) {
+    state.timelineIndex = -1;
+    return;
+  }
+  state.timelineIndex = Math.max(0, Math.min(state.timelineEvents.length - 1, index));
+  const event = state.timelineEvents[state.timelineIndex];
+  dom.eventList.querySelectorAll(".event-item").forEach((item, itemIndex) => {
+    item.classList.toggle("is-active", itemIndex === state.timelineIndex);
+  });
+  const active = dom.eventList.children[state.timelineIndex];
+  active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
+  const nodeId = Array.isArray(event?.node_ids) ? event.node_ids.find((value) => state.nodeObjects.has(value)) : "";
+  if (inspect && nodeId) selectNode(nodeId);
+}
+
+function toggleTimelinePlayback() {
+  if (!state.timelineEvents.length) return;
+  if (state.timelinePlaying) {
+    stopTimelinePlayback();
+    return;
+  }
+  state.timelinePlaying = true;
+  dom.timelinePlay.classList.add("is-playing");
+  dom.timelinePlay.innerHTML = '<i data-lucide="pause"></i>';
+  dom.timelinePlay.setAttribute("aria-label", "Pause timeline");
+  dom.timelinePlay.dataset.tooltip = "Pause";
+  createIcons({ icons: APP_ICONS });
+  if (state.timelineIndex >= state.timelineEvents.length - 1) setTimelineIndex(0);
+  state.timelineTimer = window.setInterval(() => {
+    if (state.timelineIndex >= state.timelineEvents.length - 1) {
+      stopTimelinePlayback();
+      return;
+    }
+    setTimelineIndex(state.timelineIndex + 1);
+  }, 2200);
+}
+
+function eventPolarity(event) {
+  const declared = normalizePolarity(event?.polarity);
+  if (declared !== "neutral") return declared;
+  const eventType = String(event?.event_type || "");
+  if (eventType.includes("disappeared") || eventType.includes("dissolved")) return "negative";
+  if (eventType.includes("appeared") || eventType.includes("formed")) return "positive";
+  return "neutral";
+}
+
 function renderEvents(snapshot) {
-  const events = Array.isArray(snapshot.events) ? snapshot.events.slice(0, 5) : [];
-  dom.eventCount.textContent = `${events.length} RECENT`;
+  stopTimelinePlayback();
+  const timeline = snapshot.evidence_timeline || {};
+  const events = Array.isArray(timeline.events)
+    ? timeline.events
+    : Array.isArray(snapshot.events) ? snapshot.events : [];
+  state.timelineEvents = events.slice(-120);
+  state.timelineIndex = state.timelineEvents.length ? state.timelineEvents.length - 1 : -1;
+  dom.eventCount.textContent = `${state.timelineEvents.length} EVENTS`;
   dom.eventList.replaceChildren();
-  if (!events.length) {
+  if (!state.timelineEvents.length) {
     const empty = document.createElement("span");
     empty.className = "event-empty";
-    empty.textContent = "No bounded events attached to this snapshot";
+    empty.textContent = "ยังไม่มี Evidence Timeline ใน snapshot";
     dom.eventList.append(empty);
     return;
   }
-  for (const event of events) {
-    const item = document.createElement("div");
-    item.className = "event-item";
+  for (const [index, event] of state.timelineEvents.entries()) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `event-item ${index === state.timelineIndex ? "is-active" : ""}`;
+    item.dataset.eventId = event.event_id || String(index);
     item.innerHTML = `
-      <span class="event-marker"></span>
+      <span class="event-marker ${escapeHtml(eventPolarity(event))}"></span>
       <time>${escapeHtml(formatShortDate(event.observed_at))}</time>
       <span class="event-summary">${escapeHtml(event.summary || event.event_type || "Evidence event")}</span>
       <span class="event-source">${escapeHtml(event.source || "snapshot")}</span>
     `;
+    item.addEventListener("click", () => {
+      stopTimelinePlayback();
+      setTimelineIndex(index);
+    });
     dom.eventList.append(item);
   }
 }
@@ -1058,6 +1597,9 @@ async function loadTicker(ticker) {
   try {
     const snapshot = validateSnapshot(await fetchJson(snapshotUrlFor(normalized)), normalized);
     renderSummary(snapshot);
+    state.snapshot = snapshot;
+    renderMarketChart(snapshot);
+    renderTrade(snapshot);
     renderEvents(snapshot);
     renderGalaxy(snapshot);
     setLoading(false);
@@ -1082,6 +1624,63 @@ function bindUi() {
   $("#reset-camera").addEventListener("click", () => controls?.reset());
   $("#zoom-in").addEventListener("click", () => adjustZoom(-1.5));
   $("#zoom-out").addEventListener("click", () => adjustZoom(1.5));
+  $("#timeline-previous").addEventListener("click", () => {
+    stopTimelinePlayback();
+    setTimelineIndex(state.timelineIndex - 1);
+  });
+  $("#timeline-next").addEventListener("click", () => {
+    stopTimelinePlayback();
+    setTimelineIndex(state.timelineIndex + 1);
+  });
+  dom.timelinePlay.addEventListener("click", toggleTimelinePlayback);
+  document.querySelectorAll("[data-chart-range]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.chartRange = button.dataset.chartRange;
+      renderMarketChart(state.snapshot);
+    });
+  });
+  document.querySelectorAll("[data-workspace-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const view = button.dataset.workspaceView;
+      if (!view) return;
+      dom.workspace.dataset.workspaceView = view;
+      $("#app").dataset.mobileView = view;
+      document.querySelectorAll(".nav-button[data-workspace-view]").forEach((item) => item.classList.toggle("is-active", item === button));
+      window.setTimeout(() => {
+        resizeScene();
+        drawMarketChart();
+      }, 40);
+    });
+  });
+  dom.marketChart.addEventListener("pointermove", (event) => {
+    const points = selectedChartPoints();
+    if (!points.length) return;
+    const rect = dom.marketChart.getBoundingClientRect();
+    const left = 14;
+    const right = 58;
+    const usable = Math.max(1, rect.width - left - right);
+    const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - left) / usable));
+    state.chartHoverIndex = Math.round(ratio * (points.length - 1));
+    const point = points[state.chartHoverIndex];
+    dom.chartTooltip.hidden = false;
+    dom.chartTooltip.innerHTML = `
+      <strong>${escapeHtml(formatShortDate(point.ts))}</strong><br>
+      O ${escapeHtml(formatPrice(point.open))} · H ${escapeHtml(formatPrice(point.high))}<br>
+      L ${escapeHtml(formatPrice(point.low))} · C ${escapeHtml(formatPrice(point.close))}<br>
+      VOL ${escapeHtml(formatCompactNumber(point.volume, 1))}
+    `;
+    const tooltipWidth = 148;
+    const leftPosition = Math.max(6, Math.min(rect.width - tooltipWidth - 6, event.clientX - rect.left + 12));
+    const topPosition = Math.max(6, Math.min(rect.height - 76, event.clientY - rect.top - 34));
+    dom.chartTooltip.style.left = `${leftPosition}px`;
+    dom.chartTooltip.style.top = `${topPosition}px`;
+    drawMarketChart();
+  });
+  dom.marketChart.addEventListener("pointerleave", () => {
+    state.chartHoverIndex = -1;
+    dom.chartTooltip.hidden = true;
+    drawMarketChart();
+  });
   $("#fullscreen-button").addEventListener("click", async () => {
     if (!document.fullscreenElement) await dom.stage.requestFullscreen?.();
     else await document.exitFullscreen?.();
@@ -1089,31 +1688,12 @@ function bindUi() {
   setInterval(() => {
     dom.clock.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
   }, 1000);
+  const chartObserver = new ResizeObserver(() => drawMarketChart());
+  chartObserver.observe(dom.chartWrap);
 }
 
 async function boot() {
-  createIcons({
-    icons: {
-      Activity,
-      Bell,
-      BrainCircuit,
-      CalendarDays,
-      CircleHelp,
-      List,
-      Maximize2,
-      MousePointer2,
-      Network,
-      Orbit,
-      RefreshCw,
-      RotateCcw,
-      Settings2,
-      ShieldCheck,
-      TriangleAlert,
-      X,
-      ZoomIn,
-      ZoomOut,
-    },
-  });
+  createIcons({ icons: APP_ICONS });
   initScene();
   bindUi();
   await loadManifest();

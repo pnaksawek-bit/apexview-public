@@ -1,8 +1,10 @@
-# ApexView Phase 3-6 Read-only Viewer
+# ApexView Phase 3-9 Read-only Viewer
 
 This is the read-only frontend for the `APEXVIEW-SNAPSHOT-v1.0` contract. The
 same renderer now covers the Phase 4 lifecycle presentation and the Phase 5
-Short Horizon selector without taking ownership of any decision.
+Short Horizon selector without taking ownership of any decision. Phase 8 adds
+backend-owned evidence replay, and Phase 9 adds a paper-only Trade Lens with a
+fail-closed Cloud Risk Gate contract.
 
 ## Run
 
@@ -38,12 +40,30 @@ the root path and on a project-hosted static URL below the repository path.
 To move beyond the fixture, replace the generated manifest and snapshot
 artifacts from `apexview_universe_export.py` without changing the renderer.
 
+## Phase 8-9 additions
+
+- `apexthinker/apexview_timeline.py` provides the bounded
+  `APEXVIEW-EVIDENCE-TIMELINE-v1.0` event stream. The browser replays declared
+  events and exact snapshot comparisons; it does not infer relationships from
+  animation or distance.
+- `apexthinker/apexview_market_chart.py` provides stored OHLCV points only.
+  Range buttons select a display window and never fabricate missing candles or
+  turn daily history into an intraday feed.
+- `apexthinker/trade_tags.py` provides up to six explanatory Trade Lens tags
+  from the existing Short Horizon execution context. They do not affect the
+  main score or TAG admission.
+- `apexthinker/trade_risk_gate.py` and `apexthinker/paper_trade_journal.py`
+  stop at paper-only review. `can_submit_broker` is always false in the
+  current contract, so this frontend remains a read-only eye.
+
+The Phase 8-9 boundary and remaining production exit criteria are recorded in
+`APEXVIEW_PHASE8_9.md` and `ROADMAP_STATUS.md`.
+
 ## Static publish and Telegram handoff
 
-The public repository includes `.github/workflows/pages.yml`. After GitHub
-Pages is enabled for the repository with GitHub Actions as its source, a push
-to `main` builds and publishes only `apexview/dist`. The expected public
-origin for this repository is:
+The public deployment lives in the separate `pnaksawek-bit/apexview-public`
+repository. Its `.github/workflows/pages.yml` builds this viewer and publishes
+only `apexview/dist` to GitHub Pages. The expected public origin is:
 
 `https://pnaksawek-bit.github.io/apexview-public`
 

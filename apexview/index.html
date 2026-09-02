@@ -8,7 +8,7 @@
     <title>ApexView / Galaxy</title>
   </head>
   <body>
-    <div id="app">
+    <div id="app" data-mobile-view="galaxy">
       <header class="topbar">
         <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true"><i data-lucide="brain-circuit"></i></span>
@@ -33,11 +33,11 @@
 
       <aside class="sidebar" aria-label="ApexView navigation">
         <nav>
-          <button class="nav-button is-active" aria-label="Galaxy" data-tooltip="Galaxy"><i data-lucide="orbit"></i></button>
-          <button class="nav-button" aria-label="Signals" data-tooltip="Signals"><i data-lucide="activity"></i></button>
+          <button class="nav-button is-active" aria-label="Galaxy" data-tooltip="Galaxy" data-workspace-view="galaxy"><i data-lucide="orbit"></i></button>
+          <button class="nav-button" aria-label="Price chart" data-tooltip="Price chart" data-workspace-view="chart"><i data-lucide="candlestick-chart"></i></button>
           <button class="nav-button" aria-label="Lineage" data-tooltip="Lineage"><i data-lucide="network"></i></button>
           <button class="nav-button" aria-label="Snapshot list" data-tooltip="Snapshot list"><i data-lucide="list"></i></button>
-          <button class="nav-button" aria-label="Timeline" data-tooltip="Timeline"><i data-lucide="calendar-days"></i></button>
+          <button class="nav-button" aria-label="Evidence timeline" data-tooltip="Evidence timeline" data-workspace-view="timeline"><i data-lucide="calendar-days"></i></button>
         </nav>
         <nav class="sidebar-bottom">
           <button class="nav-button" aria-label="Notifications" data-tooltip="Notifications"><i data-lucide="bell"></i></button>
@@ -46,7 +46,7 @@
         </nav>
       </aside>
 
-      <main class="workspace">
+      <main class="workspace" id="workspace" data-workspace-view="galaxy">
         <section class="galaxy-stage" id="galaxy-stage" aria-label="ApexView Galaxy">
           <div id="galaxy-canvas" class="galaxy-canvas"></div>
           <div class="stage-vignette" aria-hidden="true"></div>
@@ -76,10 +76,45 @@
           </div>
         </section>
 
-        <section class="event-strip" aria-label="Recent evidence events">
+        <section class="market-console" id="market-console" aria-label="Market price chart">
+          <header class="market-console-header">
+            <div class="market-console-title">
+              <span class="eyebrow">PRICE FIELD</span>
+              <strong id="chart-interval">DAILY · SOURCE SNAPSHOT</strong>
+              <span id="chart-source">--</span>
+            </div>
+            <div class="chart-stat-line" aria-label="Chart range statistics">
+              <div><span>LAST</span><strong id="chart-last">--</strong></div>
+              <div><span>CHANGE</span><strong id="chart-change">--</strong></div>
+              <div><span>RANGE</span><strong id="chart-range-stat">--</strong></div>
+            </div>
+            <div class="range-control" id="chart-range-control" aria-label="Chart time range">
+              <button type="button" data-chart-range="1M">1M</button>
+              <button type="button" data-chart-range="3M" class="is-active">3M</button>
+              <button type="button" data-chart-range="6M">6M</button>
+              <button type="button" data-chart-range="1Y">1Y</button>
+              <button type="button" data-chart-range="ALL">ALL</button>
+            </div>
+          </header>
+          <div class="chart-wrap" id="chart-wrap">
+            <canvas id="market-chart" role="img" aria-label="Read-only OHLCV chart"></canvas>
+            <div class="chart-tooltip" id="chart-tooltip" hidden></div>
+            <div class="chart-empty" id="chart-empty" hidden>
+              <i data-lucide="chart-no-axes-combined"></i>
+              <span>ยังไม่มี OHLCV ที่ประกาศไว้ใน snapshot นี้</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="event-strip" id="evidence-strip" aria-label="Evidence timeline">
           <div class="event-strip-heading">
-            <span class="eyebrow">EVENT FEED</span>
+            <span class="eyebrow">EVIDENCE TIME</span>
             <span class="event-count" id="event-count">0</span>
+            <div class="timeline-controls" aria-label="Timeline playback controls">
+              <button class="icon-button small" id="timeline-previous" aria-label="Previous event" data-tooltip="Previous"><i data-lucide="skip-back"></i></button>
+              <button class="icon-button small" id="timeline-play" aria-label="Play timeline" data-tooltip="Play"><i data-lucide="play"></i></button>
+              <button class="icon-button small" id="timeline-next" aria-label="Next event" data-tooltip="Next"><i data-lucide="skip-forward"></i></button>
+            </div>
           </div>
           <div class="event-list" id="event-list"></div>
         </section>
@@ -125,6 +160,27 @@
             <div><span class="legend-swatch caution"></span><span>Caution</span><strong id="caution-count">0</strong></div>
             <div><span class="legend-swatch neutral"></span><span>Neutral</span><strong id="neutral-count">0</strong></div>
             <div><span class="legend-swatch critical"></span><span>Critical emphasis</span><strong id="critical-count">0</strong></div>
+            <div><span class="legend-swatch trade"></span><span>Trade lens</span><strong id="trade-count">0</strong></div>
+          </div>
+        </section>
+
+        <section class="trade-lens" id="trade-lens">
+          <div class="section-heading">
+            <div class="trade-heading">
+              <i data-lucide="shield-alert"></i>
+              <span class="eyebrow">TRADE LENS</span>
+            </div>
+            <span class="trade-status" id="trade-status">UNAVAILABLE</span>
+          </div>
+          <div class="trade-metrics">
+            <div><span>BALANCE</span><strong id="trade-balance">--</strong></div>
+            <div><span>COVERAGE</span><strong id="trade-coverage">--</strong></div>
+            <div><span>AUTHORITY</span><strong>RISK GATE</strong></div>
+          </div>
+          <div class="trade-tag-list" id="trade-tag-list"></div>
+          <div class="trade-gate-note" id="trade-gate-note">
+            <i data-lucide="lock-keyhole"></i>
+            <span>ApexView แสดงผลเท่านั้น คำขอเทรดต้องผ่าน Cloud Risk Gate</span>
           </div>
         </section>
 
