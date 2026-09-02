@@ -592,6 +592,7 @@ function validateSnapshot(payload, ticker) {
   if (payload.evidence_timeline && (payload.evidence_timeline.version !== TIMELINE_VERSION || payload.evidence_timeline.read_only !== true)) {
     throw new Error("Unsupported evidence-timeline contract");
   }
+  const tradeEye = payload.trade_eye;
   const timeframe = payload.trade?.timeframe;
   if (timeframe && timeframe.version !== TRADE_TIMEFRAME_VERSION) {
     throw new Error("Unsupported trade-timeframe contract");
@@ -610,7 +611,17 @@ function validateSnapshot(payload, ticker) {
   if (payload.trade?.execution_authority === true || payload.trade?.weight_impact_pct) {
     throw new Error("Trade projection violates read-only boundary");
   }
-  const tradeEye = payload.trade_eye;
+  const tradeEyePlan = tradeEye?.plan;
+  if (tradeEyePlan && (
+    tradeEyePlan.version !== TRADE_PLAN_VERSION
+    || tradeEyePlan.read_only !== true
+    || tradeEyePlan.execution_enabled !== false
+    || tradeEyePlan.can_submit_broker !== false
+    || tradeEyePlan.live_execution_enabled !== false
+    || tradeEyePlan.broker_order !== null
+  )) {
+    throw new Error("Trade Eye plan violates paper-only boundary");
+  }
   if (tradeEye && (
     typeof tradeEye !== "object"
     || tradeEye.version !== TRADE_EYE_VERSION
@@ -618,6 +629,7 @@ function validateSnapshot(payload, ticker) {
     || tradeEye.mode !== "trade_only"
     || tradeEye.execution_authority !== false
     || tradeEye.broker_order !== null
+    || tradeEye.weight_impact_pct
     || !Array.isArray(tradeEye.visible_tags)
     || !Array.isArray(tradeEye.diagnostic_tags)
     || !tradeEye.movement
