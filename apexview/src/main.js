@@ -67,8 +67,17 @@ const MARKET_CHART_VERSION = "APEXVIEW-MARKET-CHART-v1.0";
 const TIMELINE_VERSION = "APEXVIEW-EVIDENCE-TIMELINE-v1.0";
 const TRADE_TIMEFRAME_VERSION = "APEX-TRADE-TIMEFRAME-v1.0";
 const TRADE_PLAN_VERSION = "APEX-TRADE-PLAN-v1.0";
+const TRADE_EYE_VERSION = "APEX-TRADE-EYE-v1.0";
+const TRADE_EYE_EVENT_TYPES = new Set([
+  "trade_tag_appeared",
+  "trade_tag_disappeared",
+  "trade_tag_score_changed",
+  "trade_signal_changed",
+  "execution_gate_changed",
+  "action_changed",
+]);
 const DEFAULT_TICKER = "RKLB";
-const MAX_RENDER_TAGS = 80;
+const MAX_RENDER_TAGS = 12;
 const MAX_VISIBLE_TRADE_TAGS = 6;
 
 const DEFAULT_MANIFEST = {
@@ -119,6 +128,7 @@ const dom = {
   stage: $("#galaxy-stage"),
   loading: $("#loading-state"),
   loadingText: $("#loading-text"),
+  tradeEyeEmpty: $("#trade-eye-empty"),
   error: $("#error-state"),
   errorText: $("#error-text"),
   tickerSelect: $("#ticker-select"),
@@ -155,6 +165,10 @@ const dom = {
   detailFacts: $("#detail-facts"),
   clock: $("#runtime-clock"),
   workspace: $("#workspace"),
+  tradeDeskSource: $("#trade-desk-source"),
+  tradeDeskCount: $("#trade-desk-count"),
+  tradeCandidateList: $("#trade-candidate-list"),
+  tradeDeskEmpty: $("#trade-desk-empty"),
   marketChart: $("#market-chart"),
   chartWrap: $("#chart-wrap"),
   chartTooltip: $("#chart-tooltip"),
@@ -596,6 +610,28 @@ function validateSnapshot(payload, ticker) {
   if (payload.trade?.execution_authority === true || payload.trade?.weight_impact_pct) {
     throw new Error("Trade projection violates read-only boundary");
   }
+  const tradeEye = payload.trade_eye;
+  if (tradeEye && (
+    typeof tradeEye !== "object"
+    || tradeEye.version !== TRADE_EYE_VERSION
+    || tradeEye.read_only !== true
+    || tradeEye.mode !== "trade_only"
+    || tradeEye.execution_authority !== false
+    || tradeEye.broker_order !== null
+    || !Array.isArray(tradeEye.visible_tags)
+    || !Array.isArray(tradeEye.diagnostic_tags)
+    || !tradeEye.movement
+    || tradeEye.movement.animation_is_display_only !== true
+    || !Array.isArray(tradeEye.movement.events)
+  )) {
+    throw new Error("Trade Eye violates its read-only contract");
+  }
+  if ([...(tradeEye?.visible_tags || []), ...(tradeEye?.diagnostic_tags || [])].some((tag) => tag?.group !== "trade")) {
+    throw new Error("Trade Eye contains a non-trade TAG");
+  }
+  if (tradeEye?.movement?.events?.some((event) => !TRADE_EYE_EVENT_TYPES.has(String(event?.event_type || "")))) {
+    throw new Error("Trade Eye contains an undeclared movement event");
+  }
   return payload;
 }
 
@@ -672,12 +708,54 @@ async function loadManifest() {
     ? String(queryTicker).toUpperCase()
     : available[0] || DEFAULT_TICKER;
   populateTickerSelect();
+  renderTradeDesk();
 }
 
 function updateQueryTicker(ticker) {
   const url = new URL(window.location.href);
   url.searchParams.set("ticker", ticker);
   window.history.replaceState({}, "", url);
+}
+
+function renderTradeDesk() {
+  if (!dom.tradeCandidateList) return;
+  const source = state.manifest?.source || {};
+  const candidates = (state.manifest?.stocks || [])
+    .filter((item) => item && item.kind !== "test_fixture" && String(item.ticker || "").trim())
+    .map((item) => ({ ...item, ticker: String(item.ticker).toUpperCase() }));
+  const logicVersion = String(source.logic_version || "").trim();
+  dom.tradeDeskSource.textContent = logicVersion
+    ? `SHORT HORIZON · ${logicVersion}`
+    : "SHORT HORIZON RANKING";
+  dom.tradeDeskCount.textContent = `${candidates.length} CANDIDATE${candidates.length === 1 ? "" : "S"}`;
+  dom.tradeCandidateList.replaceChildren();
+  if (dom.tradeDeskEmpty) dom.tradeDeskEmpty.hidden = candidates.length > 0;
+  for (const item of candidates) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `trade-candidate-row ${item.execution_actionable ? "is-actionable" : "is-review"}`;
+    const rank = Number(item.rank);
+    const rankText = Number.isFinite(rank) && rank > 0 ? `#${rank}` : "#--";
+    const status = item.status_name || item.execution_status || "UPSTREAM REVIEW";
+    const execution = item.execution_actionable
+      ? "EXECUTION DECLARED · RISK GATE"
+      : "REVIEW · NO TRADE INTENT";
+    row.innerHTML = `
+      <span class="trade-candidate-rank">${escapeHtml(rankText)}</span>
+      <span class="trade-candidate-main">
+        <strong>${escapeHtml(item.ticker)}</strong>
+        <small>${escapeHtml(status)} · ${escapeHtml(item.clarity_tier || "clarity not declared")}</small>
+      </span>
+      <span class="trade-candidate-state">${escapeHtml(execution)}</span>
+      <span class="trade-candidate-date">${escapeHtml(item.as_of_ts ? formatDate(item.as_of_ts) : "--")}</span>
+      <span class="trade-candidate-open">OPEN EYE →</span>
+    `;
+    row.addEventListener("click", () => {
+      document.querySelector('[data-workspace-view="galaxy"]')?.click();
+      loadTicker(item.ticker);
+    });
+    dom.tradeCandidateList.append(row);
+  }
 }
 
 function disposeObject(object) {
@@ -761,21 +839,22 @@ function smoothStep(value) {
 
 function buildBackground(ticker) {
   const random = createRandom(seedFromString(`${ticker}:background`));
-  addParticleField({ random, count: 560, radius: 26, size: 0.042, opacity: 0.62, colorMode: "cool", depth: 0.15 });
-  addParticleField({ random, count: 170, radius: 17, size: 0.065, opacity: 0.48, colorMode: "white", depth: 0.45 });
-  addParticleField({ random, count: 90, radius: 12, size: 0.09, opacity: 0.34, colorMode: "dust", depth: 0.85 });
-  for (let cloud = 0; cloud < 5; cloud += 1) {
-    const dust = addParticleField({ random, count: 115, radius: 10 + random() * 5, size: 0.085 + random() * 0.035, opacity: 0.12, colorMode: "dust", depth: 0.3 });
-    dust.position.set((random() - 0.5) * 11, (random() - 0.5) * 8, (random() - 0.5) * 10);
-    dust.rotation.set(random() * 0.4, random() * 0.4, random() * Math.PI);
-  }
+  // Background points are atmosphere only.  Trade meaning is carried by the
+  // bounded Trade Eye TAG nodes, never by a nebula, distance, or drift.
+  addParticleField({ random, count: 250, radius: 26, size: 0.028, opacity: 0.42, colorMode: "cool", depth: 0.15 });
+  addParticleField({ random, count: 72, radius: 17, size: 0.038, opacity: 0.28, colorMode: "white", depth: 0.45 });
+  addParticleField({ random, count: 28, radius: 12, size: 0.045, opacity: 0.16, colorMode: "dust", depth: 0.85 });
 }
 
 function signalActiveForNode(node) {
   return Boolean(
-    node?.display?.signal_active === true
-    || node?.critical === true
-    || (node?.group === "trade" && node?.status === "passed")
+    node?.group === "trade"
+    && (
+      node?.display?.signal_active === true
+      || node?.visual_state?.signal_active === true
+      || node?.status === "passed"
+      || node?.hard_blocker === true
+    )
   );
 }
 
@@ -945,10 +1024,10 @@ function createTagObject(node, position, maxAbsScore, random) {
 function renderNodes(snapshot) {
   const nodes = [];
   const seen = new Set();
-  for (const raw of [...(snapshot.nodes || []), ...(snapshot.trade?.tags || [])]) {
+  for (const raw of tradeEyeTags(snapshot)) {
     const node = raw && typeof raw === "object" ? { ...raw } : null;
     const viewId = String(node?.view_id || "");
-    if (!node || !viewId || seen.has(viewId)) continue;
+    if (!node || node.group !== "trade" || !viewId || seen.has(viewId)) continue;
     seen.add(viewId);
     node.critical = Boolean(node.critical);
     node.lifecycle = node.lifecycle || { state: "active", change: "unknown" };
@@ -962,6 +1041,17 @@ function buildTags(snapshot) {
   const nodes = renderNodes(snapshot)
     .filter((node) => node?.lifecycle?.state !== "inactive" || node?.lifecycle?.change === "disappeared")
     .slice(0, MAX_RENDER_TAGS);
+  if (dom.tradeEyeEmpty) {
+    const available = snapshot.trade_eye?.available === true;
+    dom.tradeEyeEmpty.hidden = nodes.length > 0;
+    dom.tradeEyeEmpty.classList.toggle("is-unavailable", !available);
+    const title = dom.tradeEyeEmpty.querySelector("strong");
+    const message = dom.tradeEyeEmpty.querySelector("span");
+    if (title) title.textContent = available ? "TRADE TAGS PENDING" : "NO TRADE TAGS";
+    if (message) message.textContent = available
+      ? "ยังไม่มี execution factor ที่พร้อมแสดงเป็นดาว"
+      : "Short Horizon ยังไม่ประกาศ execution context";
+  }
   const maxAbsScore = Math.max(1, ...nodes.map((node) => Math.abs(numberOrNull(node.score) || 0)));
   const random = createRandom(seedFromString(`${snapshot.stock.ticker}:tags`));
   const positions = new Map();
@@ -977,7 +1067,8 @@ function buildTags(snapshot) {
 }
 
 function buildEdges(snapshot, positions) {
-  for (const edge of snapshot.edges || []) {
+  // The Eye never falls back to generic VI lineage edges.
+  for (const edge of snapshot.trade_eye?.edges || []) {
     const source = positions.get(edge.source);
     const target = positions.get(edge.target);
     if (!source || !target) continue;
@@ -1008,15 +1099,15 @@ function buildCore(snapshot) {
   coreGroup = new THREE.Group();
   const coreColor = new THREE.Color(0xeffff8);
   const outer = new THREE.Mesh(
-    new THREE.SphereGeometry(0.34, 18, 18),
+    new THREE.SphereGeometry(0.15, 14, 14),
     new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   const mid = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 18, 18),
+    new THREE.SphereGeometry(0.09, 14, 14),
     new THREE.MeshBasicMaterial({ color: 0x61e6b1, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), new THREE.MeshBasicMaterial({ color: coreColor }));
-  const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.038, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), new THREE.MeshBasicMaterial({ color: coreColor }));
+  const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   coreGroup.add(outer, mid, core, highlight);
   coreGroup.userData = { outer, mid, core, highlight, phase: 0.4 };
   galaxyRoot.add(coreGroup);
@@ -1025,11 +1116,14 @@ function buildCore(snapshot) {
   labelElement.className = "core-label";
   labelElement.innerHTML = `
     <span class="core-label-ticker">${escapeHtml(stock.ticker || "--")}</span>
-    <span class="core-label-name">${escapeHtml(stock.name || "ApexView snapshot")}</span>
-    <span class="core-label-state">${escapeHtml(stock.action || "READ-ONLY")}</span>
+    <span class="core-label-name">${escapeHtml(stock.name || "Short Horizon Trade Eye")}</span>
+    <span class="core-label-state">${escapeHtml(snapshot.trade_eye?.available === true ? "SHORT HORIZON" : "NO TRADE CONTEXT")}</span>
   `;
   coreLabel = new CSS2DObject(labelElement);
   coreLabel.position.set(0, -0.54, 0);
+  const hasTradeTags = tradeEyeTags(snapshot).length > 0;
+  coreLabel.visible = hasTradeTags;
+  labelElement.style.display = hasTradeTags ? "" : "none";
   coreGroup.add(coreLabel);
 }
 
@@ -1467,6 +1561,8 @@ function renderDetail(node) {
   const hidden = node.hidden || {};
   dom.detailFacts.innerHTML = `
     <div><span>POLARITY</span><strong>${escapeHtml(polarity)}</strong></div>
+    <div><span>TRADE STATUS</span><strong>${escapeHtml(node.status || "not declared")}</strong></div>
+    <div><span>TIMEFRAME WEIGHT</span><strong>${escapeHtml(numberOrNull(node.timeframe_weight_pct) === null ? "--" : `${numberOrNull(node.timeframe_weight_pct).toFixed(0)}%`)}</strong></div>
     <div><span>LIFECYCLE</span><strong>${escapeHtml(lifecycle.state || "unknown")}</strong></div>
     <div><span>CHANGE</span><strong>${escapeHtml(lifecycle.change || "unknown")}</strong></div>
     <div><span>HIDDEN STATE</span><strong>${escapeHtml(hidden.state || "normal")}</strong></div>
@@ -1476,10 +1572,22 @@ function renderDetail(node) {
 
 function renderSummary(snapshot) {
   const stock = snapshot.stock || {};
-  const counts = snapshot.counts || {};
-  const tradeCount = Array.isArray(snapshot.trade?.tags) ? snapshot.trade.tags.length : 0;
+  const eyeTags = tradeEyeTags(snapshot);
+  const eye = snapshot.trade_eye || {};
+  const diagnosticCount = Number(eye.counts?.diagnostic || Math.max(0, (snapshot.trade?.tags?.length || 0) - eyeTags.length));
+  const eyeCounts = eyeTags.reduce((result, tag) => {
+    const status = String(tag?.status || "watch").toLowerCase();
+    const polarity = normalizePolarity(tag?.polarity);
+    if (status === "passed") result.passed += 1;
+    else if (status === "blocked" || tag?.hard_blocker) result.blocked += 1;
+    else result.watch += 1;
+    if (polarity === "neutral") result.neutral += 1;
+    if (tag?.hard_blocker) result.hard += 1;
+    return result;
+  }, { passed: 0, blocked: 0, watch: 0, neutral: 0, hard: 0 });
+  const tradeCount = eyeTags.length;
   dom.ticker.textContent = stock.ticker || "--";
-  dom.stockName.textContent = stock.name || `${stock.ticker || "Stock"} · read-only evidence field`;
+  dom.stockName.textContent = stock.name || `${stock.ticker || "Stock"} · Short Horizon trade eye`;
   dom.price.textContent = formatPrice(stock.price);
   dom.action.textContent = stock.action || "READ-ONLY";
   dom.action.className = `action-label ${String(stock.action || "").toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`;
@@ -1488,21 +1596,36 @@ function renderSummary(snapshot) {
   dom.marketTime.textContent = formatDate(snapshot.as_of?.market_ts);
   dom.logicVersion.textContent = snapshot.logic_version || "ไม่ระบุ";
   dom.sourceContract.textContent = snapshot.contract_version || SNAPSHOT_VERSION;
-  dom.activeCount.textContent = `${counts.active || 0} TAG · ${tradeCount} TRADE`;
-  dom.positiveCount.textContent = counts.positive || 0;
-  dom.negativeCount.textContent = counts.negative || 0;
-  dom.cautionCount.textContent = counts.caution || 0;
-  dom.neutralCount.textContent = counts.neutral || 0;
-  dom.criticalCount.textContent = counts.critical || 0;
+  dom.activeCount.textContent = `${tradeCount} VISIBLE${diagnosticCount ? ` · ${diagnosticCount} DIAGNOSTIC` : ""}`;
+  dom.positiveCount.textContent = eyeCounts.passed;
+  dom.negativeCount.textContent = eyeCounts.blocked;
+  dom.cautionCount.textContent = eyeCounts.watch;
+  dom.neutralCount.textContent = eyeCounts.neutral;
+  dom.criticalCount.textContent = eyeCounts.hard;
   dom.tradeCount.textContent = tradeCount;
   dom.fixtureBadge.hidden = selectedManifestItem(stock.ticker)?.kind !== "test_fixture";
   if (dom.timelineStatus) {
-    const timeline = snapshot.evidence_timeline || snapshot.timeline || {};
-    const eventCount = Array.isArray(timeline.events) ? timeline.events.length : 0;
-    dom.timelineStatus.textContent = timeline.comparison_available
-      ? `EVIDENCE · ${eventCount} EVENTS`
-      : `EVIDENCE · ${eventCount ? `${eventCount} BASELINE` : "BASELINE"}`;
+    const movement = snapshot.trade_eye?.movement || {};
+    const eventCount = Array.isArray(movement.events) ? movement.events.length : 0;
+    dom.timelineStatus.textContent = movement.supported
+      ? `TRADE · ${eventCount} EVENTS`
+      : "TRADE · BASELINE ONLY";
   }
+}
+
+function tradeEyeTags(snapshot) {
+  const eye = snapshot?.trade_eye;
+  if (eye && Array.isArray(eye.visible_tags)) return eye.visible_tags;
+  const tradeTags = snapshot?.trade?.tags;
+  return Array.isArray(tradeTags) ? tradeTags.slice(0, MAX_VISIBLE_TRADE_TAGS) : [];
+}
+
+function tradeEyeMovementEvents(snapshot) {
+  const movement = snapshot?.trade_eye?.movement;
+  if (movement && Array.isArray(movement.events)) return movement.events;
+  const allowed = new Set(["trade_tag_appeared", "trade_tag_disappeared", "trade_tag_score_changed", "trade_signal_changed", "execution_gate_changed", "action_changed"]);
+  const timeline = snapshot?.evidence_timeline || {};
+  return Array.isArray(timeline.events) ? timeline.events.filter((event) => allowed.has(String(event?.event_type || ""))) : [];
 }
 
 function renderTradePlan(trade, snapshot) {
@@ -1574,10 +1697,12 @@ function renderTradePlan(trade, snapshot) {
 
 function renderTrade(snapshot) {
   const trade = snapshot.trade || {};
-  const tags = Array.isArray(trade.tags) ? trade.tags.slice(0, MAX_VISIBLE_TRADE_TAGS) : [];
+  const tags = tradeEyeTags(snapshot);
+  const eye = snapshot.trade_eye || {};
+  const diagnosticCount = Number(eye.counts?.diagnostic || Math.max(0, (trade.tags?.length || 0) - tags.length));
   const available = trade.available === true;
   const balance = numberOrNull(trade.weighted_balance);
-  dom.tradeCount.textContent = Array.isArray(trade.tags) ? trade.tags.length : 0;
+  dom.tradeCount.textContent = tags.length;
   dom.tradeStatus.textContent = available ? trade.status_label || trade.status || "REVIEW" : "UNAVAILABLE";
   dom.tradeStatus.className = `trade-status ${trade.status === "ready_for_external_risk_gate" ? "is-ready" : trade.status === "blocked" ? "is-blocked" : ""}`;
   dom.tradeBalance.textContent = balance === null ? "--" : `${balance > 0 ? "+" : ""}${balance.toFixed(2)}`;
@@ -1602,6 +1727,12 @@ function renderTrade(snapshot) {
         <strong>${escapeHtml(formatScore(tag.score))} · ${escapeHtml(weightText)}</strong>
       `;
       dom.tradeTagList.append(row);
+    }
+    if (diagnosticCount) {
+      const note = document.createElement("span");
+      note.className = "trade-tag-diagnostic-note";
+      note.textContent = `+${diagnosticCount} diagnostic factor${diagnosticCount === 1 ? "" : "s"} stay outside the Eye`;
+      dom.tradeTagList.append(note);
     }
   }
   const risk = trade.external_risk_gate || {};
@@ -1674,10 +1805,7 @@ function eventPolarity(event) {
 
 function renderEvents(snapshot) {
   stopTimelinePlayback();
-  const timeline = snapshot.evidence_timeline || {};
-  const events = Array.isArray(timeline.events)
-    ? timeline.events
-    : Array.isArray(snapshot.events) ? snapshot.events : [];
+  const events = tradeEyeMovementEvents(snapshot);
   state.timelineEvents = events.slice(-120);
   state.timelineIndex = state.timelineEvents.length ? state.timelineEvents.length - 1 : -1;
   dom.eventCount.textContent = `${state.timelineEvents.length} EVENTS`;
@@ -1685,7 +1813,7 @@ function renderEvents(snapshot) {
   if (!state.timelineEvents.length) {
     const empty = document.createElement("span");
     empty.className = "event-empty";
-    empty.textContent = "ยังไม่มี Evidence Timeline ใน snapshot";
+    empty.textContent = "ยังไม่มี Trade Movement ใน snapshot";
     dom.eventList.append(empty);
     return;
   }

@@ -36,7 +36,7 @@
           <button class="nav-button is-active" aria-label="Galaxy" data-tooltip="Galaxy" data-workspace-view="galaxy"><i data-lucide="orbit"></i></button>
           <button class="nav-button" aria-label="Price chart" data-tooltip="Price chart" data-workspace-view="chart"><i data-lucide="candlestick-chart"></i></button>
           <button class="nav-button" aria-label="Lineage" data-tooltip="Lineage"><i data-lucide="network"></i></button>
-          <button class="nav-button" aria-label="Snapshot list" data-tooltip="Snapshot list"><i data-lucide="list"></i></button>
+          <button class="nav-button" aria-label="Short Horizon candidates" data-tooltip="Short Horizon" data-workspace-view="trade-desk"><i data-lucide="list"></i></button>
           <button class="nav-button" aria-label="Evidence timeline" data-tooltip="Evidence timeline" data-workspace-view="timeline"><i data-lucide="calendar-days"></i></button>
         </nav>
         <nav class="sidebar-bottom">
@@ -51,8 +51,8 @@
           <div id="galaxy-canvas" class="galaxy-canvas"></div>
           <div class="stage-vignette" aria-hidden="true"></div>
           <div class="stage-meta stage-meta-left">
-            <span class="eyebrow">SPATIAL EVIDENCE</span>
-            <span class="meta-line">Snapshot projection · no inferred relationships</span>
+            <span class="eyebrow">TRADE EYE</span>
+            <span class="meta-line">Short Horizon · trade TAGs only</span>
             <span class="meta-line">Qualified tags glow · display only</span>
           </div>
           <div class="stage-meta stage-meta-right">
@@ -74,6 +74,10 @@
             <strong>Snapshot unavailable</strong>
             <span id="error-text">ApexView could not read this snapshot.</span>
             <button class="text-button" id="retry-button">Retry</button>
+          </div>
+          <div class="eye-empty-state" id="trade-eye-empty" hidden>
+            <strong>NO TRADE TAGS</strong>
+            <span>Short Horizon ยังไม่ประกาศ execution context</span>
           </div>
         </section>
 
@@ -109,7 +113,7 @@
 
         <section class="event-strip" id="evidence-strip" aria-label="Evidence timeline">
           <div class="event-strip-heading">
-            <span class="eyebrow">EVIDENCE TIME</span>
+            <span class="eyebrow">TRADE MOVEMENT</span>
             <span class="event-count" id="event-count">0</span>
             <div class="timeline-controls" aria-label="Timeline playback controls">
               <button class="icon-button small" id="timeline-previous" aria-label="Previous event" data-tooltip="Previous"><i data-lucide="skip-back"></i></button>
@@ -119,9 +123,33 @@
           </div>
           <div class="event-list" id="event-list"></div>
         </section>
+
+        <section class="trade-desk" id="trade-desk" aria-label="Short Horizon candidate board">
+          <header class="trade-desk-header">
+            <div>
+              <span class="eyebrow">SHORT HORIZON / CANDIDATE BOARD</span>
+              <h2>Trade-ready context, read only</h2>
+              <p>ลำดับและสถานะมาจาก upstream ranking เท่านั้น · เลือกหุ้นเพื่อเปิด Trade Eye และ Paper Trade Map</p>
+            </div>
+            <div class="trade-desk-source">
+              <span id="trade-desk-source">SHORT HORIZON RANKING</span>
+              <strong id="trade-desk-count">0 CANDIDATES</strong>
+            </div>
+          </header>
+          <div class="trade-desk-rule">
+            <span>ADMISSION OWNER</span><strong>CLOUD VALIDATOR</strong>
+            <span>ORDER OWNER</span><strong>RISK GATE</strong>
+            <span>MODE</span><strong>PAPER ONLY</strong>
+          </div>
+          <div class="trade-candidate-list" id="trade-candidate-list"></div>
+          <div class="trade-desk-empty" id="trade-desk-empty" hidden>
+            <strong>NO CURRENT CANDIDATES</strong>
+            <span>manifest ยังไม่มี Short Horizon rows ที่ผ่าน upstream gate · RKLB fixture ไม่ถูกนับเป็น candidate</span>
+          </div>
+        </section>
       </main>
 
-      <aside class="inspector" aria-label="ApexView snapshot inspector">
+      <aside class="inspector" aria-label="ApexView Trade Eye inspector">
         <section class="ticker-header">
           <div class="ticker-select-wrap">
             <label for="ticker-select">GALAXY</label>
@@ -132,9 +160,9 @@
 
         <section class="stock-summary">
           <div class="stock-summary-main">
-            <span class="eyebrow">APEXVIEW / SNAPSHOT</span>
+            <span class="eyebrow">APEXVIEW / TRADE EYE</span>
             <h1 id="stock-ticker">--</h1>
-            <p id="stock-name">Waiting for source snapshot</p>
+            <p id="stock-name">Waiting for Short Horizon trade context</p>
           </div>
           <div class="stock-price-block">
             <span class="eyebrow">PRICE</span>
@@ -152,16 +180,16 @@
 
         <section class="tag-summary">
           <div class="section-heading">
-            <span class="eyebrow">TAG FIELD</span>
-            <strong id="active-count">0 ACTIVE</strong>
+            <span class="eyebrow">TRADE TAG FIELD</span>
+            <strong id="active-count">0 VISIBLE</strong>
           </div>
           <div class="legend-list">
-            <div><span class="legend-swatch positive"></span><span>Positive</span><strong id="positive-count">0</strong></div>
-            <div><span class="legend-swatch negative"></span><span>Negative</span><strong id="negative-count">0</strong></div>
-            <div><span class="legend-swatch caution"></span><span>Caution</span><strong id="caution-count">0</strong></div>
-            <div><span class="legend-swatch neutral"></span><span>Neutral</span><strong id="neutral-count">0</strong></div>
-            <div><span class="legend-swatch critical"></span><span>Critical emphasis</span><strong id="critical-count">0</strong></div>
-            <div><span class="legend-swatch trade"></span><span>Trade lens</span><strong id="trade-count">0</strong></div>
+            <div><span class="legend-swatch positive"></span><span>Passed</span><strong id="positive-count">0</strong></div>
+            <div><span class="legend-swatch negative"></span><span>Blocked</span><strong id="negative-count">0</strong></div>
+            <div><span class="legend-swatch caution"></span><span>Watch</span><strong id="caution-count">0</strong></div>
+            <div><span class="legend-swatch neutral"></span><span>Diagnostic</span><strong id="neutral-count">0</strong></div>
+            <div><span class="legend-swatch critical"></span><span>Hard blocker</span><strong id="critical-count">0</strong></div>
+            <div><span class="legend-swatch trade"></span><span>Eye stars</span><strong id="trade-count">0</strong></div>
           </div>
         </section>
 
@@ -181,7 +209,7 @@
           <div class="trade-plan" id="trade-plan">
             <div class="trade-plan-heading">
               <div>
-                <span class="eyebrow">PAPER TRADE MAP</span>
+                <span class="eyebrow">PAPER TRADE MAP · SHORT HORIZON</span>
                 <strong id="trade-plan-status">NO MAP</strong>
               </div>
               <span class="timeframe-chip" id="trade-timeframe">1D · DAILY</span>
@@ -234,7 +262,7 @@
           <i data-lucide="shield-check"></i>
           <div>
             <span class="eyebrow">DISPLAY RULE</span>
-            <p>Distance is visual only. Edges appear only when the snapshot declares <code>tag.components</code> lineage.</p>
+            <p>ดาวและแสงเป็น display-only ของ Trade TAG ที่ประกาศไว้เท่านั้น VI อยู่ใน snapshot/Telegram card แยกจาก Trade Eye.</p>
           </div>
         </section>
       </aside>

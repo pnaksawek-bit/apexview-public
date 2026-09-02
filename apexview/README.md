@@ -1,9 +1,10 @@
 # ApexView Phase 3-9 Read-only Viewer
 
 This is the read-only frontend for the `APEXVIEW-SNAPSHOT-v1.0` contract. The
-same renderer now covers the Phase 4 lifecycle presentation and the Phase 5
-Short Horizon selector without taking ownership of any decision. Phase 8 adds
-backend-owned evidence replay, and Phase 9 adds a paper-only Trade Lens with a
+renderer keeps the existing snapshot/VI evidence lane separate from the
+Phase 9 Trade Eye: the Eye renders only a bounded set of execution Trade TAGs
+from Short Horizon, without taking ownership of any decision. Phase 8 adds
+backend-owned evidence replay, and Phase 9 adds a paper-only Trade Map with a
 fail-closed Cloud Risk Gate contract.
 
 ## Run
@@ -23,13 +24,15 @@ the root path and on a project-hosted static URL below the repository path.
 
 ## Truth boundary
 
-- TAG color is read from the snapshot polarity/mood projection.
-- TAG size is derived from the absolute snapshot score for display only.
-- Edges are drawn only from declared `tag.components` entries.
-- `appeared`, `persisted`, and `disappeared` transitions are read from
-  snapshot lifecycle fields; the browser does not compare or invent evidence.
-- Critical pulse rings and dust are visual presentation around nodes already
-  marked critical; they do not create relationships or scores.
+- The Trade Eye renders only `trade_eye.visible_tags` (or the bounded legacy
+  `trade.tags` compatibility lane); generic VI `snapshot.nodes` are not drawn
+  as Trade Eye stars.
+- Trade TAG color/status/weight are read from the backend projection. The
+  browser does not calculate a score, reorder factors, or promote a candidate.
+- Stars, glow, pulse, position, distance, and inert background points are
+  presentation only; they are never evidence or hidden relationships.
+- Trade Movement is read only from declared `trade_eye.movement` events or
+  backend exact snapshot comparison. The browser does not infer transitions.
 - The ticker selector is populated from `manifest.stocks`, which is the
   read-only export of the current Short Horizon candidate gate. `test_fixtures`
   stay visibly separate from candidates.
@@ -49,9 +52,17 @@ artifacts from `apexview_universe_export.py` without changing the renderer.
 - `apexthinker/apexview_market_chart.py` provides stored OHLCV points only.
   Range buttons select a display window and never fabricate missing candles or
   turn daily history into an intraday feed.
-- `apexthinker/trade_tags.py` provides up to six explanatory Trade Lens tags
-  from the existing Short Horizon execution context. They do not affect the
-  main score or TAG admission.
+- `apexthinker/trade_tags.py` provides up to six visible Trade Eye factors and
+  keeps diagnostic factors outside the star field. They come from the existing
+  Short Horizon execution context and do not affect the main score or TAG
+  admission.
+- `apexthinker/trade_timeframes.py` declares the 1D/1H/15M/5M stack and
+  display-only factor weights. The current daily feed activates 1D; intraday
+  lanes remain pending until verified point-in-time data, freshness, latency,
+  cost, and paper-execution evidence exist.
+- The `Short Horizon / Candidate Board` reads the upstream manifest order and
+  opens a selected ticker in the Trade Eye/Paper Trade Map. It never ranks,
+  admits, or executes a candidate in the browser.
 - `apexthinker/trade_risk_gate.py` and `apexthinker/paper_trade_journal.py`
   stop at paper-only review. `can_submit_broker` is always false in the
   current contract, so this frontend remains a read-only eye.
