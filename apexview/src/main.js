@@ -1059,10 +1059,10 @@ function buildTags(snapshot) {
     dom.tradeEyeEmpty.classList.toggle("is-unavailable", !available);
     const title = dom.tradeEyeEmpty.querySelector("strong");
     const message = dom.tradeEyeEmpty.querySelector("span");
-    if (title) title.textContent = available ? "TRADE TAGS PENDING" : "NO TRADE TAGS";
+    if (title) title.textContent = available ? "TRADE TAGS PENDING" : "NO TRADE SETUP";
     if (message) message.textContent = available
       ? "ยังไม่มี execution factor ที่พร้อมแสดงเป็นดาว"
-      : "Short Horizon ยังไม่ประกาศ execution context";
+      : "Short Horizon ยังไม่ประกาศ execution context · ดู /bh TICKER เพื่อดู blocker";
   }
   const maxAbsScore = Math.max(1, ...nodes.map((node) => Math.abs(numberOrNull(node.score) || 0)));
   const random = createRandom(seedFromString(`${snapshot.stock.ticker}:tags`));
@@ -1766,11 +1766,32 @@ function stopTimelinePlayback() {
     dom.timelinePlay.dataset.tooltip = "Play";
     createIcons({ icons: APP_ICONS });
   }
+  updateTimelineControls();
+}
+
+function updateTimelineControls() {
+  const total = state.timelineEvents.length;
+  const previous = $("#timeline-previous");
+  const next = $("#timeline-next");
+  const play = dom.timelinePlay;
+  if (previous) {
+    previous.disabled = total === 0 || state.timelineIndex <= 0;
+    previous.setAttribute("aria-disabled", String(previous.disabled));
+  }
+  if (next) {
+    next.disabled = total === 0 || state.timelineIndex >= total - 1;
+    next.setAttribute("aria-disabled", String(next.disabled));
+  }
+  if (play) {
+    play.disabled = total === 0;
+    play.setAttribute("aria-disabled", String(play.disabled));
+  }
 }
 
 function setTimelineIndex(index, { inspect = true } = {}) {
   if (!state.timelineEvents.length) {
     state.timelineIndex = -1;
+    updateTimelineControls();
     return;
   }
   state.timelineIndex = Math.max(0, Math.min(state.timelineEvents.length - 1, index));
@@ -1781,6 +1802,7 @@ function setTimelineIndex(index, { inspect = true } = {}) {
   const active = dom.eventList.children[state.timelineIndex];
   active?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" });
   const nodeId = Array.isArray(event?.node_ids) ? event.node_ids.find((value) => state.nodeObjects.has(value)) : "";
+  updateTimelineControls();
   if (inspect && nodeId) selectNode(nodeId);
 }
 
@@ -1825,8 +1847,9 @@ function renderEvents(snapshot) {
   if (!state.timelineEvents.length) {
     const empty = document.createElement("span");
     empty.className = "event-empty";
-    empty.textContent = "ยังไม่มี Trade Movement ใน snapshot";
+    empty.textContent = "TIMELINE ACCUMULATING · รอ snapshot/event จริงจาก backend";
     dom.eventList.append(empty);
+    updateTimelineControls();
     return;
   }
   for (const [index, event] of state.timelineEvents.entries()) {
@@ -1846,6 +1869,7 @@ function renderEvents(snapshot) {
     });
     dom.eventList.append(item);
   }
+  updateTimelineControls();
 }
 
 async function loadTicker(ticker) {
