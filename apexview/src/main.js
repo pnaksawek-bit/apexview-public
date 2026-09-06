@@ -3,6 +3,13 @@ import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   Activity,
+  ArrowUpRight,
+  History,
+  Info,
+  PanelsTopLeft,
+  Repeat2,
+  ScanEye,
+  ScanLine,
   Bell,
   BrainCircuit,
   CalendarDays,
@@ -31,9 +38,18 @@ import {
   createIcons,
 } from "lucide";
 import "./styles.css";
+import "./observatory.css";
+import { publicationStatus } from "./publication_status.js";
 
 const APP_ICONS = {
   Activity,
+  ArrowUpRight,
+  History,
+  Info,
+  PanelsTopLeft,
+  Repeat2,
+  ScanEye,
+  ScanLine,
   Bell,
   BrainCircuit,
   CalendarDays,
@@ -98,6 +114,11 @@ const DEFAULT_MANIFEST = {
 
 const state = {
   manifest: DEFAULT_MANIFEST,
+  manifestLoaded: false,
+  snapshotRequest: 0,
+  motionPaused: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  visualTime: 0,
+  workspaceView: "galaxy",
   snapshot: null,
   ticker: DEFAULT_TICKER,
   selectedId: "",
@@ -496,7 +517,7 @@ function drawMarketChart() {
 }
 
 function renderMarketChart(snapshot) {
-  const chart = snapshot.market_chart || {};
+  const chart = snapshot?.market_chart || {};
   const availableRanges = new Set((chart.ranges || []).filter((item) => item?.available).map((item) => item.key));
   if (!availableRanges.has(state.chartRange)) state.chartRange = availableRanges.has(chart.default_range) ? chart.default_range : "ALL";
   document.querySelectorAll("[data-chart-range]").forEach((button) => {
@@ -707,12 +728,14 @@ function snapshotUrlFor(ticker) {
 async function loadManifest() {
   try {
     const manifest = await fetchJson(assetUrl("/data/manifest.json"));
-    if (manifest?.contract_version !== UNIVERSE_VERSION || manifest.read_only !== true) {
+    if (manifest?.contract_version !== UNIVERSE_VERSION || manifest.read_only !== true || !Array.isArray(manifest.stocks)) {
       throw new Error("Unsupported universe manifest");
     }
     state.manifest = manifest;
+    state.manifestLoaded = true;
   } catch {
     state.manifest = DEFAULT_MANIFEST;
+    state.manifestLoaded = false;
   }
   const queryTicker = new URLSearchParams(window.location.search).get("ticker");
   const available = getManifestOptions(state.manifest).map((item) => item.ticker);
@@ -721,6 +744,60 @@ async function loadManifest() {
     : available[0] || DEFAULT_TICKER;
   populateTickerSelect();
   renderTradeDesk();
+  renderPublicationStatus();
+}
+
+function renderPublicationStatus() {
+  const publication = publicationStatus(state.manifest, state.manifestLoaded);
+  $("#overview-candidates").textContent = publication.count === null ? "—" : publication.count;
+  $("#nav-candidate-count").textContent = publication.count === null ? "—" : publication.count;
+  $("#overview-candidate-unit").textContent = publication.kind === "partial" ? "published · partial" : "candidates";
+  $("#overview-candidate-note").textContent = publication.title;
+  $("#candidate-empty-title").textContent = publication.title;
+  $("#candidate-empty-note").textContent = publication.note;
+  const timestamp = numberOrNull(state.manifest.generated_at);
+  $("#publication-date").textContent = state.manifestLoaded && timestamp
+    ? `Published ${formatShortDate(timestamp)} · stored snapshot`
+    : "ไม่ทราบเวลาที่เผยแพร่ · ตรวจสอบแหล่งข้อมูล";
+  const notice = $("#publication-notice");
+  notice.hidden = !["unavailable", "partial"].includes(publication.kind);
+  notice.querySelector("span").textContent = publication.note;
+}
+
+function setWorkspaceView(view) {
+  const views = {
+    galaxy: ["Overview", "Your edge, <em>in view.</em>", "มองเห็นความสัมพันธ์ เข้าใจการใช้ทุน และตัดสินใจจากหลักฐาน"],
+    chart: ["Market chart", "Price, <em>with context.</em>", "ย้อนดูข้อมูลราคาที่จัดเก็บ โดยคงความละเอียดจากแหล่งข้อมูลเดิม"],
+    "trade-desk": ["Opportunities", "Follow <em>the evidence.</em>", "ทุก candidate มีที่มา ลำดับ และสถานะจากระบบวิเคราะห์"],
+    timeline: ["Evidence journal", "A record of <em>every change.</em>", "ติดตามเหตุการณ์ที่ระบบประกาศ พร้อมย้อนกลับไปดูหลักฐาน"],
+    capital: ["Capital velocity", "Capital, <em>with purpose.</em>", "มองความเร็วการหมุนเงิน ควบคู่กับผลตอบแทนและเวลาที่ใช้ทุน"],
+  };
+  if (!views[view]) return;
+  state.workspaceView = view;
+  dom.workspace.dataset.workspaceView = view;
+  $("#app").dataset.mobileView = view;
+  $("#app").dataset.view = view;
+  $("#view-name").textContent = views[view][0];
+  $("#page-title").innerHTML = views[view][1];
+  $("#page-subtitle").textContent = views[view][2];
+  document.querySelectorAll(".nav-button[data-workspace-view]").forEach((button) => {
+    const active = button.dataset.workspaceView === view;
+    button.classList.toggle("is-active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+  stopTimelinePlayback();
+  window.scrollTo({ top: 0, behavior: "instant" });
+  requestAnimationFrame(() => { resizeScene(); drawMarketChart(); });
+}
+
+function updateMotionControl() {
+  const button = $("#motion-toggle");
+  button.setAttribute("aria-pressed", String(state.motionPaused));
+  button.setAttribute("aria-label", state.motionPaused ? "เล่นภาพเคลื่อนไหว" : "หยุดการเคลื่อนไหว");
+  button.innerHTML = state.motionPaused ? '<i data-lucide="play"></i>' : '<i data-lucide="pause"></i>';
+  if (controls) controls.autoRotate = !state.motionPaused;
+  createIcons({ icons: APP_ICONS });
 }
 
 function updateQueryTicker(ticker) {
@@ -732,14 +809,14 @@ function updateQueryTicker(ticker) {
 function renderTradeDesk() {
   if (!dom.tradeCandidateList) return;
   const source = state.manifest?.source || {};
-  const candidates = (state.manifest?.stocks || [])
-    .filter((item) => item && item.kind !== "test_fixture" && String(item.ticker || "").trim())
+  const publication = publicationStatus(state.manifest, state.manifestLoaded);
+  const candidates = publication.candidates
     .map((item) => ({ ...item, ticker: String(item.ticker).toUpperCase() }));
   const logicVersion = String(source.logic_version || "").trim();
   dom.tradeDeskSource.textContent = logicVersion
     ? `SHORT HORIZON · ${logicVersion}`
     : "SHORT HORIZON RANKING";
-  dom.tradeDeskCount.textContent = `${candidates.length} CANDIDATE${candidates.length === 1 ? "" : "S"}`;
+  dom.tradeDeskCount.textContent = publication.count === null ? "DATA UNAVAILABLE" : `${candidates.length} PUBLISHED${publication.kind === "partial" ? " · PARTIAL" : ""}`;
   dom.tradeCandidateList.replaceChildren();
   if (dom.tradeDeskEmpty) dom.tradeDeskEmpty.hidden = candidates.length > 0;
   for (const item of candidates) {
@@ -763,7 +840,7 @@ function renderTradeDesk() {
       <span class="trade-candidate-open">OPEN EYE →</span>
     `;
     row.addEventListener("click", () => {
-      document.querySelector('[data-workspace-view="galaxy"]')?.click();
+      setWorkspaceView("galaxy");
       loadTicker(item.ticker);
     });
     dom.tradeCandidateList.append(row);
@@ -1058,12 +1135,13 @@ function buildTags(snapshot) {
     dom.tradeEyeEmpty.hidden = nodes.length > 0;
     dom.tradeEyeEmpty.classList.toggle("is-unavailable", !available);
     const title = dom.tradeEyeEmpty.querySelector("strong");
-    const message = dom.tradeEyeEmpty.querySelector("span");
-    if (title) title.textContent = available ? "TRADE TAGS PENDING" : "NO TRADE SETUP";
+    const message = dom.tradeEyeEmpty.querySelector(".eye-empty-message");
+    if (title) title.textContent = available ? "Awaiting factors." : "Awaiting context.";
     if (message) message.textContent = available
       ? "ยังไม่มี execution factor ที่พร้อมแสดงเป็นดาว"
-      : "Short Horizon ยังไม่ประกาศ execution context · ดู /bh TICKER เพื่อดู blocker";
+      : "ยังไม่มี execution context ที่เผยแพร่\nพร้อมแสดงเมื่อระบบส่งหลักฐานมา";
   }
+  $("#orbital-guide").hidden = nodes.length > 0;
   const maxAbsScore = Math.max(1, ...nodes.map((node) => Math.abs(numberOrNull(node.score) || 0)));
   const random = createRandom(seedFromString(`${snapshot.stock.ticker}:tags`));
   const positions = new Map();
@@ -1404,10 +1482,13 @@ function resolveLabelOverlaps() {
 
 function animate() {
   requestAnimationFrame(animate);
+  const delta = state.clock.getDelta();
+  if (document.hidden || state.workspaceView !== "galaxy") return;
   state.frame += 1;
-  const time = state.clock.getElapsedTime();
+  if (!state.motionPaused) state.visualTime += delta;
+  const time = state.visualTime;
   for (const item of state.animationObjects) {
-    if (item?.object && item.drift) {
+    if (!state.motionPaused && item?.object && item.drift) {
       item.object.rotation.y += item.drift;
       item.object.rotation.x += item.drift * 0.37;
     }
@@ -1418,7 +1499,7 @@ function animate() {
   controls?.update();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
-  if (state.frame % 4 === 0 && time - state.lastLabelLayoutAt > 0.06) {
+  if (state.frame % 4 === 0) {
     resolveLabelOverlaps();
     state.lastLabelLayoutAt = time;
   }
@@ -1426,8 +1507,8 @@ function animate() {
 
 function initScene() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x02070c);
-  scene.fog = new THREE.FogExp2(0x02070c, 0.008);
+  scene.background = new THREE.Color(0x0c181b);
+  scene.fog = new THREE.FogExp2(0x0c181b, 0.008);
   camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
   camera.position.set(0, 1.8, 20);
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -1445,7 +1526,7 @@ function initScene() {
   controls.enablePan = false;
   controls.minDistance = 10;
   controls.maxDistance = 34;
-  controls.autoRotate = true;
+  controls.autoRotate = !state.motionPaused;
   controls.autoRotateSpeed = 0.08;
   galaxyRoot = new THREE.Group();
   backgroundLayer = new THREE.Group();
@@ -1454,6 +1535,7 @@ function initScene() {
   galaxyRoot.add(backgroundLayer, edgeLayer, tagLayer);
   scene.add(galaxyRoot);
   resizeScene();
+  new ResizeObserver(resizeScene).observe(dom.galaxy);
   window.addEventListener("resize", resizeScene);
   dom.galaxy.addEventListener("pointermove", onPointerMove);
   dom.galaxy.addEventListener("pointerdown", onPointerDown);
@@ -1616,6 +1698,12 @@ function renderSummary(snapshot) {
   dom.criticalCount.textContent = eyeCounts.hard;
   dom.tradeCount.textContent = tradeCount;
   dom.fixtureBadge.hidden = selectedManifestItem(stock.ticker)?.kind !== "test_fixture";
+  const isFixture = selectedManifestItem(stock.ticker)?.kind === "test_fixture";
+  $("#stage-data-kind").textContent = isFixture ? `${stock.ticker} · TEST FIXTURE` : `${stock.ticker || "—"} · SNAPSHOT`;
+  $("#stage-data-kind").classList.toggle("is-published", !isFixture);
+  $("#snapshot-context-note").textContent = isFixture
+    ? "ข้อมูลตัวอย่างสำหรับตรวจการแสดงผล · ไม่ใช่ candidate หรือราคาสด"
+    : "ราคาจาก snapshot ที่จัดเก็บ · ตรวจเวลาตลาดก่อนใช้อ้างอิง";
   if (dom.timelineStatus) {
     const movement = snapshot.trade_eye?.movement || {};
     const eventCount = Array.isArray(movement.events) ? movement.events.length : 0;
@@ -1647,7 +1735,7 @@ function renderTradePlan(trade, snapshot) {
     : snapshot?.short_horizon?.timeframe_contract || {};
   const selected = String(timeframe.selected || snapshot?.short_horizon?.active_timeframe || "1D").toUpperCase();
   const fallbackProfiles = [
-    { timeframe: "1D", label: "Daily", role_label: "บริบท + สัญญาณ", data_available: true },
+    { timeframe: "1D", label: "Daily", role_label: "บริบท + สัญญาณ", data_available: false },
     { timeframe: "1H", label: "1 Hour", role_label: "สร้าง setup", data_available: false },
     { timeframe: "15M", label: "15 Minute", role_label: "ยืนยัน trigger", data_available: false },
     { timeframe: "5M", label: "5 Minute", role_label: "เก็บจังหวะ execution", data_available: false },
@@ -1666,7 +1754,7 @@ function renderTradePlan(trade, snapshot) {
     pill.className = `timeframe-pill ${key === selected ? "is-active" : ""} ${available ? "is-available" : "is-pending"}`;
     pill.title = available
       ? `${profile.role_label || profile.role || "available"} · data available`
-      : `${profile.role_label || profile.role || "pending"} · intraday feed required`;
+      : `${profile.role_label || profile.role || "pending"} · verified timeframe contract required`;
     pill.innerHTML = `<b>${escapeHtml(key)}</b><small>${escapeHtml(available ? "READY" : "PENDING")}</small>`;
     dom.tradeTimeframeList.append(pill);
   }
@@ -1728,7 +1816,8 @@ function renderTrade(snapshot) {
   } else {
     for (const tag of tags) {
       const polarity = normalizePolarity(tag.polarity);
-      const row = document.createElement("div");
+      const row = document.createElement("button");
+      row.type = "button";
       row.className = `trade-tag ${tag.hard_blocker ? "is-blocker" : ""}`;
       row.title = tag.reason || "";
       const tagWeight = numberOrNull(tag.timeframe_weight_pct);
@@ -1738,6 +1827,10 @@ function renderTrade(snapshot) {
         <span>${escapeHtml(tag.label || tag.code || "Trade factor")}</span>
         <strong>${escapeHtml(formatScore(tag.score))} · ${escapeHtml(weightText)}</strong>
       `;
+      row.addEventListener("click", () => {
+        selectNode(tag.view_id);
+        $("#detail-panel").scrollIntoView({ behavior: state.motionPaused ? "instant" : "smooth", block: "center" });
+      });
       dom.tradeTagList.append(row);
     }
     if (diagnosticCount) {
@@ -1873,6 +1966,7 @@ function renderEvents(snapshot) {
 }
 
 async function loadTicker(ticker) {
+  const requestId = ++state.snapshotRequest;
   const normalized = String(ticker || DEFAULT_TICKER).toUpperCase();
   state.ticker = normalized;
   dom.tickerSelect.value = normalized;
@@ -1882,6 +1976,7 @@ async function loadTicker(ticker) {
   setLoading(true, `Loading ${normalized} snapshot`);
   try {
     const snapshot = validateSnapshot(await fetchJson(snapshotUrlFor(normalized)), normalized);
+    if (requestId !== state.snapshotRequest) return;
     renderSummary(snapshot);
     state.snapshot = snapshot;
     renderMarketChart(snapshot);
@@ -1890,6 +1985,14 @@ async function loadTicker(ticker) {
     renderGalaxy(snapshot);
     setLoading(false);
   } catch (error) {
+    if (requestId !== state.snapshotRequest) return;
+    state.snapshot = null;
+    clearSceneLayers();
+    renderSummary({ stock: { ticker: normalized, action: "DATA UNAVAILABLE" } });
+    renderMarketChart(null);
+    renderTrade({});
+    renderEvents({});
+    dom.tradeEyeEmpty.hidden = true;
     setError(error instanceof Error ? error.message : "Snapshot unavailable");
   }
 }
@@ -1904,7 +2007,13 @@ function adjustZoom(delta) {
 
 function bindUi() {
   dom.tickerSelect.addEventListener("change", () => loadTicker(dom.tickerSelect.value));
-  $("#refresh-button").addEventListener("click", () => loadTicker(state.ticker));
+  $("#refresh-button").addEventListener("click", async () => {
+    const button = $("#refresh-button");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try { await loadManifest(); await loadTicker(state.ticker); }
+    finally { button.disabled = false; button.removeAttribute("aria-busy"); }
+  });
   $("#retry-button").addEventListener("click", () => loadTicker(state.ticker));
   $("#clear-selection").addEventListener("click", clearSelection);
   $("#reset-camera").addEventListener("click", () => controls?.reset());
@@ -1925,19 +2034,18 @@ function bindUi() {
       renderMarketChart(state.snapshot);
     });
   });
-  document.querySelectorAll("[data-workspace-view]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const view = button.dataset.workspaceView;
-      if (!view) return;
-      dom.workspace.dataset.workspaceView = view;
-      $("#app").dataset.mobileView = view;
-      document.querySelectorAll(".nav-button[data-workspace-view]").forEach((item) => item.classList.toggle("is-active", item === button));
-      window.setTimeout(() => {
-        resizeScene();
-        drawMarketChart();
-      }, 40);
-    });
+  document.querySelectorAll("button[data-workspace-view]").forEach((button) => {
+    button.addEventListener("click", () => setWorkspaceView(button.dataset.workspaceView));
   });
+  document.querySelectorAll("[data-open-view]").forEach((button) => {
+    button.addEventListener("click", () => setWorkspaceView(button.dataset.openView));
+  });
+  $("#help-button").addEventListener("click", () => $("#workspace-help").showModal());
+  $("#motion-toggle").addEventListener("click", () => {
+    state.motionPaused = !state.motionPaused;
+    updateMotionControl();
+  });
+  updateMotionControl();
   dom.marketChart.addEventListener("pointermove", (event) => {
     const points = selectedChartPoints();
     if (!points.length) return;
@@ -1968,8 +2076,12 @@ function bindUi() {
     drawMarketChart();
   });
   $("#fullscreen-button").addEventListener("click", async () => {
-    if (!document.fullscreenElement) await dom.stage.requestFullscreen?.();
-    else await document.exitFullscreen?.();
+    try {
+      if (!document.fullscreenElement) {
+        setWorkspaceView("galaxy");
+        await dom.stage.requestFullscreen?.();
+      } else await document.exitFullscreen?.();
+    } catch { /* Browser policy can decline fullscreen; the workspace remains usable. */ }
   });
   setInterval(() => {
     dom.clock.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });

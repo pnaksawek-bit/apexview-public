@@ -1,167 +1,137 @@
 <!doctype html>
-<html lang="en">
+<html lang="th">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#02070c" />
-    <meta name="description" content="ApexView read-only spatial evidence viewer" />
-    <title>ApexView / Galaxy</title>
+    <meta name="theme-color" content="#0a1012" />
+    <meta name="description" content="ApexView — a clearer view of mathematical relationships, capital and paper research." />
+    <title>ApexView — Quant Observatory</title>
+    <link rel="icon" type="image/svg+xml" href="/apex-mark.svg" />
   </head>
   <body>
-    <div id="app" data-mobile-view="galaxy">
+    <a class="skip-link" href="#workspace">ข้ามไปยังเนื้อหา</a>
+    <div id="app" data-mobile-view="galaxy" data-view="galaxy">
       <header class="topbar">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"><i data-lucide="brain-circuit"></i></span>
-          <span class="brand-name">apexthinker</span>
-          <span class="brand-divider"></span>
-          <span class="product-name">APEXVIEW</span>
-        </div>
-        <div class="runtime-status" aria-label="Runtime status">
-          <span class="status-dot"></span>
-          <span>READ-ONLY</span>
-          <time id="runtime-clock">--:--:--</time>
-        </div>
+        <div class="breadcrumb"><i data-lucide="panels-top-left"></i><span>Workspace</span><span class="breadcrumb-slash">/</span><strong id="view-name">Overview</strong></div>
         <div class="top-actions">
-          <button class="icon-button" id="refresh-button" aria-label="Reload snapshot" data-tooltip="Reload snapshot">
-            <i data-lucide="refresh-cw"></i>
-          </button>
-          <button class="icon-button" id="fullscreen-button" aria-label="Toggle fullscreen" data-tooltip="Fullscreen">
-            <i data-lucide="maximize-2"></i>
-          </button>
+          <div class="runtime-status" aria-label="โหมดการแสดงผล"><span class="status-dot"></span><span>Snapshot mode</span><time id="runtime-clock" title="เวลาบนอุปกรณ์ ไม่ใช่เวลาตลาด">--:--:--</time></div>
+          <button class="icon-button" id="refresh-button" aria-label="Reload snapshot" data-tooltip="รีเฟรชข้อมูลที่เผยแพร่"><i data-lucide="refresh-cw"></i></button>
+          <button class="icon-button" id="fullscreen-button" aria-label="Toggle fullscreen" data-tooltip="เต็มจอ Trade Eye"><i data-lucide="maximize-2"></i></button>
         </div>
       </header>
-
       <aside class="sidebar" aria-label="ApexView navigation">
-        <nav>
-          <button class="nav-button is-active" aria-label="Galaxy" data-tooltip="Galaxy" data-workspace-view="galaxy"><i data-lucide="orbit"></i></button>
-          <button class="nav-button" aria-label="Price chart" data-tooltip="Price chart" data-workspace-view="chart"><i data-lucide="candlestick-chart"></i></button>
-          <button class="nav-button" aria-label="Lineage" data-tooltip="Lineage"><i data-lucide="network"></i></button>
-          <button class="nav-button" aria-label="Short Horizon candidates" data-tooltip="Short Horizon" data-workspace-view="trade-desk"><i data-lucide="list"></i></button>
-          <button class="nav-button" aria-label="Evidence timeline" data-tooltip="Evidence timeline" data-workspace-view="timeline"><i data-lucide="calendar-days"></i></button>
-        </nav>
-        <nav class="sidebar-bottom">
-          <button class="nav-button" aria-label="Notifications" data-tooltip="Notifications"><i data-lucide="bell"></i></button>
-          <button class="nav-button" aria-label="Settings" data-tooltip="Settings"><i data-lucide="settings-2"></i></button>
-          <button class="nav-button" aria-label="Help" data-tooltip="Help"><i data-lucide="circle-help"></i></button>
-        </nav>
+        <a class="brand-lockup" href="./" aria-label="ApexView overview">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M5 24 16 5l11 19H5Z" stroke="currentColor" stroke-width="1.6"/><path d="m10 24 6-10 6 10M4 19h24" stroke="currentColor" stroke-width="1.3"/><circle cx="25" cy="9" r="2.5" fill="currentColor"/></svg></span>
+          <span class="brand-name">apex<span>view</span><small>QUANT OBSERVATORY</small></span>
+        </a>
+        <div class="sidebar-main">
+          <span class="nav-caption">WORKSPACE</span>
+          <nav aria-label="มุมมองข้อมูล">
+            <button class="nav-button is-active" aria-label="Overview" aria-current="page" data-workspace-view="galaxy"><i data-lucide="panels-top-left"></i><span>Overview</span><span class="nav-active-dot"></span></button>
+            <button class="nav-button" aria-label="Short Horizon candidates" data-workspace-view="trade-desk"><i data-lucide="scan-line"></i><span>Opportunities</span><span class="nav-count" id="nav-candidate-count">—</span></button>
+            <button class="nav-button" aria-label="Price chart" data-workspace-view="chart"><i data-lucide="candlestick-chart"></i><span>Market chart</span></button>
+            <button class="nav-button" aria-label="Capital velocity" data-workspace-view="capital"><i data-lucide="repeat-2"></i><span>Capital velocity</span></button>
+            <button class="nav-button" aria-label="Evidence timeline" data-workspace-view="timeline"><i data-lucide="history"></i><span>Evidence journal</span></button>
+          </nav>
+          <div class="sidebar-note"><span class="note-orbit" aria-hidden="true"><i data-lucide="orbit"></i></span><strong>Evidence before action.</strong><p>ทุกโอกาส เริ่มจากความสัมพันธ์<br>ที่ตรวจสอบย้อนกลับได้</p></div>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="nav-button" id="help-button" aria-label="คู่มือ ApexView"><i data-lucide="circle-help"></i><span>About this workspace</span></button>
+          <div class="workspace-identity"><span class="workspace-avatar">A</span><div><strong>ApexThinker</strong><small>Research workspace</small></div><i data-lucide="lock-keyhole"></i></div>
+        </div>
       </aside>
 
-      <main class="workspace" id="workspace" data-workspace-view="galaxy">
+      <section class="page-intro" aria-labelledby="page-title">
+        <div><div class="intro-eyebrow"><span></span> THE QUANT OBSERVATORY</div><h1 id="page-title">Your edge, <em>in view.</em></h1><p id="page-subtitle">มองเห็นความสัมพันธ์ เข้าใจการใช้ทุน และตัดสินใจจากหลักฐาน</p></div>
+        <div class="publication-meta"><span class="read-only-pill"><i data-lucide="shield-check"></i> READ-ONLY WORKSPACE</span><span id="publication-date">กำลังอ่านวันที่เผยแพร่</span></div>
+      </section>
+
+      <section class="overview-metrics" aria-label="ภาพรวมสามเป้าหมาย">
+        <button class="overview-metric" data-open-view="trade-desk">
+          <span class="overview-metric-top"><span><i data-lucide="network"></i> Published opportunities</span><i data-lucide="arrow-up-right"></i></span>
+          <span class="overview-metric-value"><strong id="overview-candidates">—</strong><span id="overview-candidate-unit">candidates</span></span>
+          <span class="overview-metric-note" id="overview-candidate-note">กำลังอ่านข้อมูลที่เผยแพร่</span>
+        </button>
+        <button class="overview-metric" data-open-view="capital">
+          <span class="overview-metric-top"><span><i data-lucide="repeat-2"></i> Capital velocity</span><i data-lucide="arrow-up-right"></i></span>
+          <span class="overview-metric-value"><strong>—</strong><span>cycles / day</span><span class="metric-pill">รอข้อมูลทุน</span></span>
+          <span class="overview-metric-note">ยังไม่มีรายงานเงินทุนที่เผยแพร่ในหน้านี้</span>
+        </button>
+        <div class="overview-metric mode-metric">
+          <span class="overview-metric-top"><span><i data-lucide="shield-check"></i> Operating mode</span><span class="mode-dot"></span></span>
+          <span class="overview-metric-value"><strong class="mode-value">Paper only</strong></span>
+          <span class="overview-metric-note">ดูหลักฐานและแผน · ไม่มีการส่งคำสั่งจากหน้านี้</span>
+        </div>
+      </section>
+
+      <main class="workspace" id="workspace" data-workspace-view="galaxy" tabindex="-1">
+        <div class="publication-notice" id="publication-notice" role="status" hidden><i data-lucide="info"></i><span></span></div>
         <section class="galaxy-stage" id="galaxy-stage" aria-label="ApexView Galaxy">
           <div id="galaxy-canvas" class="galaxy-canvas"></div>
           <div class="stage-vignette" aria-hidden="true"></div>
+          <div class="orbital-guide" id="orbital-guide" aria-hidden="true"><div class="orbit-circle orbit-outer"></div><div class="orbit-circle orbit-middle"></div><div class="orbit-circle orbit-inner"></div><span class="orbit-axis axis-horizontal"></span><span class="orbit-axis axis-vertical"></span><span class="orbit-coordinate coord-top">N / 00</span><span class="orbit-coordinate coord-left">270°</span><span class="orbit-coordinate coord-right">090°</span><span class="orbit-coordinate coord-bottom">S / 180</span></div>
           <div class="stage-meta stage-meta-left">
-            <span class="eyebrow">TRADE EYE</span>
-            <span class="meta-line">Short Horizon · trade TAGs only</span>
-            <span class="meta-line">Qualified tags glow · display only</span>
+            <span class="panel-kicker">01 / RELATIONSHIP EXPLORER</span>
+            <h2>Trade Eye <span class="subtle-tag">1D</span></h2>
+            <span class="meta-line">สำรวจปัจจัยที่ระบบประกาศ พร้อมที่มาของหลักฐาน</span>
           </div>
-          <div class="stage-meta stage-meta-right">
-            <span class="eyebrow">SOURCE</span>
-            <span class="meta-line" id="source-contract">APEXVIEW-SNAPSHOT-v1.0</span>
-            <span class="meta-line" id="timeline-status">LIFECYCLE · BASELINE</span>
-          </div>
+          <div class="stage-meta stage-meta-right"><span class="fixture-stage-pill" id="stage-data-kind">กำลังอ่านข้อมูล</span></div>
+          <div class="stage-footer"><span class="stage-legend"><i></i> Declared factors only</span><span id="timeline-status">LIFECYCLE · BASELINE</span></div>
           <div class="stage-controls" aria-label="Galaxy controls">
+            <button class="stage-control" id="motion-toggle" aria-label="หยุดการเคลื่อนไหว" aria-pressed="false" data-tooltip="หยุด / เล่นภาพเคลื่อนไหว"><i data-lucide="pause"></i></button>
             <button class="stage-control" id="reset-camera" aria-label="Reset camera" data-tooltip="Reset camera"><i data-lucide="rotate-ccw"></i></button>
             <button class="stage-control" id="zoom-out" aria-label="Zoom out" data-tooltip="Zoom out"><i data-lucide="zoom-out"></i></button>
             <button class="stage-control" id="zoom-in" aria-label="Zoom in" data-tooltip="Zoom in"><i data-lucide="zoom-in"></i></button>
           </div>
-          <div class="loading-state" id="loading-state">
-            <span class="loading-spinner"></span>
-            <span id="loading-text">Loading snapshot</span>
-          </div>
-          <div class="error-state" id="error-state" hidden>
-            <i data-lucide="triangle-alert"></i>
-            <strong>Snapshot unavailable</strong>
-            <span id="error-text">ApexView could not read this snapshot.</span>
-            <button class="text-button" id="retry-button">Retry</button>
-          </div>
+          <div class="loading-state" id="loading-state" role="status"><span class="loading-spinner"></span><span id="loading-text">Loading snapshot</span></div>
+          <div class="error-state" id="error-state" role="alert" hidden><i data-lucide="triangle-alert"></i><strong>Snapshot unavailable</strong><span id="error-text">ApexView could not read this snapshot.</span><button class="text-button" id="retry-button">Retry</button></div>
           <div class="eye-empty-state" id="trade-eye-empty" hidden>
-            <strong>NO TRADE SETUP</strong>
-            <span>Short Horizon ยังไม่ประกาศ execution context · ดู /bh TICKER เพื่อดู blocker</span>
+            <div class="eye-emblem" aria-hidden="true"><i data-lucide="scan-eye"></i></div><small class="empty-kicker">EVIDENCE FIRST</small><strong>Awaiting context.</strong><span class="eye-empty-message">ยังไม่มี execution context ที่เผยแพร่</span>
+            <button class="eye-open-button" data-open-view="trade-desk">ดูสถานะโอกาส <i data-lucide="arrow-up-right"></i></button>
           </div>
         </section>
 
         <section class="market-console" id="market-console" aria-label="Market price chart">
           <header class="market-console-header">
-            <div class="market-console-title">
-              <span class="eyebrow">PRICE FIELD</span>
-              <strong id="chart-interval">DAILY · SOURCE SNAPSHOT</strong>
-              <span id="chart-source">--</span>
-            </div>
-            <div class="chart-stat-line" aria-label="Chart range statistics">
-              <div><span>LAST</span><strong id="chart-last">--</strong></div>
-              <div><span>CHANGE</span><strong id="chart-change">--</strong></div>
-              <div><span>RANGE</span><strong id="chart-range-stat">--</strong></div>
-            </div>
-            <div class="range-control" id="chart-range-control" aria-label="Chart time range">
-              <button type="button" data-chart-range="1M">1M</button>
-              <button type="button" data-chart-range="3M" class="is-active">3M</button>
-              <button type="button" data-chart-range="6M">6M</button>
-              <button type="button" data-chart-range="1Y">1Y</button>
-              <button type="button" data-chart-range="ALL">ALL</button>
-            </div>
+            <div class="market-console-title"><span class="eyebrow">MARKET CONTEXT</span><strong id="chart-interval">DAILY · SOURCE SNAPSHOT</strong><span id="chart-source">--</span></div>
+            <div class="chart-stat-line" aria-label="Chart range statistics"><div><span>LAST</span><strong id="chart-last">--</strong></div><div><span>CHANGE</span><strong id="chart-change">--</strong></div><div><span>RANGE</span><strong id="chart-range-stat">--</strong></div></div>
+            <div class="range-control" id="chart-range-control" aria-label="Chart time range"><button type="button" data-chart-range="1M">1M</button><button type="button" data-chart-range="3M" class="is-active">3M</button><button type="button" data-chart-range="6M">6M</button><button type="button" data-chart-range="1Y">1Y</button><button type="button" data-chart-range="ALL">ALL</button></div>
           </header>
-          <div class="chart-wrap" id="chart-wrap">
-            <canvas id="market-chart" role="img" aria-label="Read-only OHLCV chart"></canvas>
-            <div class="chart-tooltip" id="chart-tooltip" hidden></div>
-            <div class="chart-empty" id="chart-empty" hidden>
-              <i data-lucide="chart-no-axes-combined"></i>
-              <span>ยังไม่มี OHLCV ที่ประกาศไว้ใน snapshot นี้</span>
-            </div>
-          </div>
+          <div class="chart-wrap" id="chart-wrap"><canvas id="market-chart" role="img" aria-label="Read-only OHLCV chart"></canvas><div class="chart-tooltip" id="chart-tooltip" hidden></div><div class="chart-empty" id="chart-empty" hidden><i data-lucide="chart-no-axes-combined"></i><span>ยังไม่มี OHLCV ที่ประกาศไว้ใน snapshot นี้</span></div></div>
         </section>
 
         <section class="event-strip" id="evidence-strip" aria-label="Evidence timeline">
-          <div class="event-strip-heading">
-            <span class="eyebrow">TRADE MOVEMENT</span>
-            <span class="event-count" id="event-count">0</span>
-            <div class="timeline-controls" aria-label="Timeline playback controls">
-              <button class="icon-button small" id="timeline-previous" aria-label="Previous event" data-tooltip="Previous"><i data-lucide="skip-back"></i></button>
-              <button class="icon-button small" id="timeline-play" aria-label="Play timeline" data-tooltip="Play"><i data-lucide="play"></i></button>
-              <button class="icon-button small" id="timeline-next" aria-label="Next event" data-tooltip="Next"><i data-lucide="skip-forward"></i></button>
-            </div>
-          </div>
+          <div class="event-strip-heading"><span class="eyebrow">EVIDENCE JOURNAL</span><span class="event-count" id="event-count">0</span><div class="timeline-controls" aria-label="Timeline playback controls"><button class="icon-button small" id="timeline-previous" aria-label="Previous event" data-tooltip="Previous"><i data-lucide="skip-back"></i></button><button class="icon-button small" id="timeline-play" aria-label="Play timeline" data-tooltip="Play"><i data-lucide="play"></i></button><button class="icon-button small" id="timeline-next" aria-label="Next event" data-tooltip="Next"><i data-lucide="skip-forward"></i></button></div></div>
           <div class="event-list" id="event-list"></div>
         </section>
 
         <section class="trade-desk" id="trade-desk" aria-label="Short Horizon candidate board">
-          <header class="trade-desk-header">
-            <div>
-              <span class="eyebrow">SHORT HORIZON / CANDIDATE BOARD</span>
-              <h2>Trade-ready context, read only</h2>
-              <p>ลำดับและสถานะมาจาก upstream ranking เท่านั้น · เลือกหุ้นเพื่อเปิด Trade Eye และ Paper Trade Map</p>
-            </div>
-            <div class="trade-desk-source">
-              <span id="trade-desk-source">SHORT HORIZON RANKING</span>
-              <strong id="trade-desk-count">0 CANDIDATES</strong>
-            </div>
-          </header>
-          <div class="trade-desk-rule">
-            <span>ADMISSION OWNER</span><strong>CLOUD VALIDATOR</strong>
-            <span>ORDER OWNER</span><strong>RISK GATE</strong>
-            <span>MODE</span><strong>PAPER ONLY</strong>
-          </div>
+          <header class="trade-desk-header"><div><span class="eyebrow">SHORT HORIZON / OPPORTUNITIES</span><h2>Every opportunity needs evidence.</h2><p>ลำดับและสถานะมาจาก upstream ranking · เลือกหุ้นเพื่อเปิด Trade Eye และ Paper Trade Map</p></div><div class="trade-desk-source"><span id="trade-desk-source">SHORT HORIZON RANKING</span><strong id="trade-desk-count">—</strong></div></header>
+          <div class="trade-desk-rule"><span>ADMISSION OWNER</span><strong>CLOUD VALIDATOR</strong><span>ORDER OWNER</span><strong>RISK GATE</strong><span>MODE</span><strong>PAPER ONLY</strong></div>
           <div class="trade-candidate-list" id="trade-candidate-list"></div>
-          <div class="trade-desk-empty" id="trade-desk-empty" hidden>
-            <strong>NO CURRENT CANDIDATES</strong>
-            <span>manifest ยังไม่มี Short Horizon rows ที่ผ่าน upstream gate · กลับ Telegram ใช้ /bh rank ready · RKLB fixture ไม่ถูกนับเป็น candidate</span>
-          </div>
+          <div class="trade-desk-empty" id="trade-desk-empty" hidden><i data-lucide="scan-line"></i><strong id="candidate-empty-title">ยังไม่มี candidate ที่เผยแพร่</strong><span id="candidate-empty-note">สถานะนี้อ้างอิงข้อมูลที่เผยแพร่ล่าสุด ไม่ใช่ผลการสแกนตลาดสด</span><button class="text-button" data-open-view="galaxy">กลับไปสำรวจ Trade Eye <i data-lucide="arrow-up-right"></i></button></div>
+        </section>
+
+        <section class="capital-desk" aria-labelledby="capital-title">
+          <span class="panel-kicker">02 / CAPITAL EFFICIENCY</span><h2 id="capital-title">Give every dollar a purpose.</h2><p class="capital-intro">ติดตามทั้งผลตอบแทน เวลาที่ทุนถูกใช้งาน และเวลาที่เงินกลับมาใช้ได้</p>
+          <div class="capital-empty-visual" aria-hidden="true"><i data-lucide="repeat-2"></i></div><span class="metric-pill">ยังไม่มีข้อมูลบัญชีที่เผยแพร่</span><h3>Capital report is not connected.</h3><p>หน้านี้ยังไม่ได้รับรายงานทุน paper จึงยังแสดงความเร็วการหมุนทุน<br class="desktop-break"> เงินที่ถูกใช้ และผลตอบแทนที่เกิดขึ้นจริงไม่ได้</p>
+          <div class="capital-measures"><div><span>CAPITAL VELOCITY</span><strong>— <small>cycles / day</small></strong><p>จำนวนรอบของทุนที่นำกลับมาใช้ได้</p></div><div><span>CAPITAL IN USE</span><strong>— <small>USD-days</small></strong><p>ทุนที่ถูกใช้งาน × ระยะเวลา</p></div><div><span>NET PAPER RETURN</span><strong>— <small>USD</small></strong><p>ผลลัพธ์หลังหักต้นทุนที่บันทึกแล้ว</p></div></div>
+          <div class="capital-footnote"><i data-lucide="info"></i><span>เงินที่รอโอกาสที่ผ่านเกณฑ์ ไม่ถือว่าเป็นเงินสูญเปล่าโดยอัตโนมัติ</span></div>
         </section>
       </main>
-
       <aside class="inspector" aria-label="ApexView Trade Eye inspector">
         <section class="ticker-header">
           <div class="ticker-select-wrap">
-            <label for="ticker-select">GALAXY</label>
+            <label for="ticker-select">INSPECT</label>
             <select id="ticker-select" aria-label="Select galaxy"></select>
           </div>
-          <span class="fixture-badge" id="fixture-badge" hidden>TEST FIXTURE</span>
+          <span class="fixture-badge" id="fixture-badge" hidden>DEMO</span>
         </section>
 
         <section class="stock-summary">
           <div class="stock-summary-main">
-            <span class="eyebrow">APEXVIEW / TRADE EYE</span>
-            <h1 id="stock-ticker">--</h1>
+            <span class="eyebrow">SELECTED SNAPSHOT</span>
+            <h2 id="stock-ticker">--</h2>
             <p id="stock-name">Waiting for Short Horizon trade context</p>
           </div>
           <div class="stock-price-block">
@@ -170,6 +140,8 @@
             <span id="stock-action" class="action-label">--</span>
           </div>
         </section>
+
+        <section class="snapshot-context"><i data-lucide="info"></i><p id="snapshot-context-note">ราคาจาก snapshot ที่จัดเก็บ ไม่ใช่ราคาสด</p></section>
 
         <section class="metric-grid" aria-label="Snapshot metrics">
           <div class="metric-row"><span>MARKET MODE</span><strong id="market-mode">--</strong></div>
@@ -180,7 +152,7 @@
 
         <section class="tag-summary">
           <div class="section-heading">
-            <span class="eyebrow">TRADE TAG FIELD</span>
+            <span class="eyebrow">FACTOR OVERVIEW</span>
             <strong id="active-count">0 VISIBLE</strong>
           </div>
           <div class="legend-list">
@@ -239,7 +211,7 @@
           </div>
           <div class="detail-empty" id="detail-empty">
             <i data-lucide="mouse-pointer-2"></i>
-            <span>Click a TAG star to inspect its source, score, lifecycle and declared evidence.</span>
+            <span>เลือกดาวหรือปัจจัยเพื่อดูที่มา คะแนน และหลักฐานที่ระบบประกาศ</span>
           </div>
           <div class="detail-content" id="detail-content" hidden>
             <div class="detail-kicker"><span class="mood-dot" id="detail-mood-dot"></span><span id="detail-group">--</span><span id="detail-critical" class="critical-chip" hidden>CRITICAL</span></div>
@@ -261,12 +233,20 @@
         <section class="truth-note">
           <i data-lucide="shield-check"></i>
           <div>
-            <span class="eyebrow">DISPLAY RULE</span>
-            <p>ดาวและแสงเป็น display-only ของ Trade TAG ที่ประกาศไว้เท่านั้น VI อยู่ใน snapshot/Telegram card แยกจาก Trade Eye.</p>
+            <span class="eyebrow">TRACEABLE BY DESIGN</span>
+            <p>ดาวและแสงเป็น display-only ของ Trade TAG ที่ประกาศไว้เท่านั้น VI อยู่ใน snapshot/Telegram card แยกจาก Trade Eye.</p><code id="source-contract">APEXVIEW-SNAPSHOT-v1.0</code>
           </div>
         </section>
       </aside>
+      <footer class="workspace-footer"><span><i data-lucide="lock-keyhole"></i> Evidence-led. Paper only. Always traceable.</span><span>APEXTHINKER <span class="footer-dot">/</span> QUANT OBSERVATORY</span></footer>
     </div>
+    <dialog id="workspace-help" class="help-dialog" aria-labelledby="help-title">
+      <form method="dialog"><button class="icon-button" aria-label="ปิดคู่มือ"><i data-lucide="x"></i></button></form><span class="panel-kicker">A GUIDE TO YOUR WORKSPACE</span><h2 id="help-title">A clearer view.<br>A considered decision.</h2><p>ApexView เป็นหน้าต่างอ่านข้อมูลที่ ApexThinker เผยแพร่</p>
+      <div class="help-item"><i data-lucide="network"></i><div><strong>Explore the relationship</strong><p>Trade Eye แสดงเฉพาะปัจจัยที่ backend ประกาศ คลิกดาวหรือรายการปัจจัยเพื่อดูหลักฐาน</p></div></div>
+      <div class="help-item"><i data-lucide="repeat-2"></i><div><strong>Understand capital-time</strong><p>Velocity ต้องมาจากรายงานทุนจริง เครื่องหมาย — หมายถึงยังไม่มีข้อมูล ไม่ใช่ศูนย์</p></div></div>
+      <div class="help-item"><i data-lucide="shield-check"></i><div><strong>Stay in control</strong><p>รีเฟรชเพื่ออ่าน snapshot ล่าสุด หน้านี้ไม่เริ่ม bot ไม่ยืนยันการเทรด และไม่ส่งคำสั่ง broker</p></div></div>
+      <p class="help-fixture-note">ป้าย DEMO / TEST FIXTURE ระบุข้อมูลตัวอย่าง ซึ่งไม่ถูกนับเป็น candidate ของระบบ</p>
+    </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

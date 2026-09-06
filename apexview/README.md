@@ -15,9 +15,35 @@ pnpm install
 pnpm dev
 ```
 
+Build and test the presentation layer with:
+
+```powershell
+pnpm test
+pnpm build
+```
+
 The page reads `public/data/manifest.json` and the snapshot URL declared by
 that manifest. The committed RKLB artifact is a Phase 2 test fixture only; it
 is not inserted into the Short Horizon candidate universe.
+
+## Quant Observatory presentation
+
+The current UI is organized as a small research workspace rather than a
+trading terminal:
+
+- Overview shows the published opportunity count, capital velocity availability
+  and paper-only mode before the relationship explorer.
+- Opportunities preserves upstream order and makes the empty, partial and
+  unavailable publication states readable without turning them into a market
+  conclusion.
+- Market chart and Evidence journal retain the stored OHLCV and declared event
+  contracts. Capital velocity is a read-only explanatory view waiting for an
+  upstream paper account report.
+- The inspector keeps the selected snapshot, factor overview, Trade Map and
+  evidence chain together. `DEMO` marks the committed RKLB fixture.
+- Desktop uses a persistent named rail; mobile uses a bottom navigation bar.
+  The motion toggle and keyboard-visible labels make the 3D presentation
+  optional and accessible.
 
 The asset loader respects Vite's base path, so the same build works locally at
 the root path and on a project-hosted static URL below the repository path.

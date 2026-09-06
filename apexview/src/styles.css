@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Noto Sans Thai";
-  src: url("/../fonts/NotoSansThai-GF.ttf") format("truetype");
+  src: url("./assets/NotoSansThai-GF.ttf") format("truetype");
   font-display: swap;
 }
 
