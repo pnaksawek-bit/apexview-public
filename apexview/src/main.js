@@ -530,11 +530,13 @@ function renderMarketChart(snapshot) {
   const observation = snapshot?.market_observation || {};
   dom.chartInterval.textContent = `${String(chart.interval || "1D").toUpperCase()} · ${chart.coverage?.points || 0} BARS`;
   const freshness = observation.status || source.freshness || "unknown";
+  const admission = String(observation.admission_status || source.admission_status || "").toUpperCase();
   const rights = observation.publication_status || source.publication_status || "";
   dom.chartSource.textContent = [
     source.name || "ไม่มีแหล่งข้อมูล",
     source.market_as_of ? `as of ${formatShortDate(source.market_as_of)}` : "",
     String(freshness).toUpperCase(),
+    admission === "BLOCKED_PROVENANCE" ? "PROVENANCE BLOCKED" : admission === "PASS" ? "PROVENANCE PASS" : "",
     rights === "BLOCKED_NON_DISPLAY" ? "PRIVATE DISPLAY" : "",
   ].filter(Boolean).join(" · ");
   const points = selectedChartPoints();
