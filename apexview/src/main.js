@@ -804,11 +804,18 @@ function renderPaperStatus(payload) {
   const counts = delivery.counts || {};
   const delivered = Number(counts.delivered || 0);
   const attention = Number(delivery.retry_required || 0) + Number(counts.sending || 0);
+  const account = delivery.paper_account || {};
+  const accountStatus = String(account.status || "UNKNOWN").toUpperCase();
   if (!dom.paperModeNote) return;
   if (status === "READY") {
+    const accountLabel = accountStatus === "ATTESTED"
+      ? "บัญชี Paper ยืนยันแล้ว"
+      : accountStatus === "MIXED"
+        ? "บัญชี Paper หลายชุด · ต้องตรวจ"
+        : "บัญชี Paper ยังไม่ยืนยัน";
     dom.paperModeNote.textContent = attention
-      ? `Paper ledger พร้อม · ACK ${delivered} · ต้องตรวจ ${attention} รายการ`
-      : `Paper ledger พร้อม · ACK ${delivered} รายการ · ไม่มีคำสั่ง broker`;
+      ? `Paper ledger พร้อม · ${accountLabel} · ACK ${delivered} · ต้องตรวจ ${attention} รายการ`
+      : `Paper ledger พร้อม · ${accountLabel} · ACK ${delivered} รายการ · ไม่มีคำสั่ง broker`;
   } else if (status === "BLOCKED") {
     dom.paperModeNote.textContent = "Paper ledger อ่านไม่ได้ · fail-closed · ไม่มีคำสั่ง broker";
   } else {
