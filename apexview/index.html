@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a1012" />
     <meta name="description" content="ApexView — a clearer view of mathematical relationships, capital and paper research." />
+    <meta name="apexview-style" content="APEXVIEW-OBSERVATORY-STYLE-v1" />
     <title>ApexView — Quant Observatory</title>
     <link rel="icon" type="image/svg+xml" href="/apex-mark.svg" />
   </head>
@@ -148,6 +149,10 @@
           <div class="metric-row"><span>SNAPSHOT TIME</span><strong id="snapshot-time">--</strong></div>
           <div class="metric-row"><span>MARKET TIME</span><strong id="market-time">--</strong></div>
           <div class="metric-row"><span>LOGIC VERSION</span><strong id="logic-version">--</strong></div>
+          <div class="metric-row"><span>TRANSPORT</span><strong id="market-transport-status">--</strong></div>
+          <div class="metric-row"><span>CHART</span><strong id="market-chart-status">--</strong></div>
+          <div class="metric-row"><span>RESEARCH</span><strong id="market-research-status">--</strong></div>
+          <div class="metric-row"><span>PUBLICATION</span><strong id="market-publication-status">--</strong></div>
         </section>
 
         <section class="tag-summary">
@@ -247,6 +252,35 @@
       <div class="help-item"><i data-lucide="shield-check"></i><div><strong>Stay in control</strong><p>รีเฟรชเพื่ออ่าน snapshot ล่าสุด หน้านี้ไม่เริ่ม bot ไม่ยืนยันการเทรด และไม่ส่งคำสั่ง broker</p></div></div>
       <p class="help-fixture-note">ป้าย DEMO / TEST FIXTURE ระบุข้อมูลตัวอย่าง ซึ่งไม่ถูกนับเป็น candidate ของระบบ</p>
     </dialog>
+    <div class="tag-explanation" id="tag-explanation" hidden>
+      <div class="tag-explanation-backdrop" data-close-tag-explanation></div>
+      <section class="tag-explanation-dialog" role="dialog" aria-modal="true" aria-labelledby="tag-explanation-label" aria-describedby="tag-explanation-reason">
+        <header class="tag-explanation-header">
+          <div class="tag-explanation-heading">
+            <span class="tag-explanation-icon" aria-hidden="true"><i data-lucide="info"></i></span>
+            <div>
+              <span class="eyebrow">คำอธิบายปัจจัยเชิงลึก</span>
+              <span class="tag-explanation-group" id="tag-explanation-group">TRADE TAG</span>
+            </div>
+          </div>
+          <button class="icon-button small" id="close-tag-explanation" type="button" aria-label="ปิดคำอธิบาย" data-tooltip="ปิด">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        <h2 id="tag-explanation-label">--</h2>
+        <div class="tag-explanation-score" id="tag-explanation-score">--</div>
+        <p class="tag-explanation-reason" id="tag-explanation-reason">ไม่มีคำอธิบายจาก snapshot</p>
+        <div class="tag-explanation-block" id="tag-explanation-components-block" hidden>
+          <span class="detail-label">DECLARED COMPONENTS</span>
+          <div class="tag-explanation-components" id="tag-explanation-components"></div>
+        </div>
+        <div class="tag-explanation-source">
+          <i data-lucide="shield-check"></i>
+          <span>คำอธิบายนี้อ่านจาก snapshot ที่ประกาศไว้เท่านั้น · ไม่คำนวณใหม่</span>
+        </div>
+        <button class="tag-explanation-close" id="tag-explanation-close-footer" type="button">ปิดหน้าต่าง</button>
+      </section>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

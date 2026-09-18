@@ -466,3 +466,24 @@ button { border: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+/* Quant Observatory: evidence explanation overlay */
+.tag-explanation { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px; }
+.tag-explanation[hidden] { display: none; }
+.tag-explanation-backdrop { position: absolute; inset: 0; background: rgba(0, 5, 9, 0.72); backdrop-filter: blur(5px); }
+.tag-explanation-dialog { position: relative; width: min(430px, 100%); padding: 18px 20px 20px; border: 1px solid rgba(97, 230, 177, 0.36); border-radius: 16px; background: #0b1b25; box-shadow: 0 22px 70px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(180, 211, 228, 0.04); }
+.tag-explanation-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.tag-explanation-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tag-explanation-heading > div { display: grid; gap: 3px; min-width: 0; }
+.tag-explanation-icon { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(97, 230, 177, 0.48); border-radius: 7px; color: var(--positive); background: rgba(97, 230, 177, 0.08); }
+.tag-explanation-icon svg { width: 16px; height: 16px; stroke-width: 1.45; }
+.tag-explanation-group { overflow: hidden; color: var(--muted); font-size: 9px; letter-spacing: 0.12em; text-overflow: ellipsis; white-space: nowrap; }
+.tag-explanation-dialog h2 { margin: 16px 0 3px; color: #f0fff7; font-size: 21px; line-height: 1.25; font-weight: 600; }
+.tag-explanation-score { color: var(--positive); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tag-explanation-reason { min-height: 54px; margin: 14px 0 0; padding: 12px 13px; border: 1px solid rgba(180, 211, 228, 0.15); border-radius: 11px; background: rgba(2, 11, 16, 0.62); color: var(--text); font-size: 11px; line-height: 1.65; }
+.tag-explanation-block { margin-top: 15px; }
+.tag-explanation-components { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.tag-explanation-components span { padding: 4px 7px; border: 1px solid rgba(97, 230, 177, 0.22); border-radius: 6px; color: var(--muted); background: rgba(97, 230, 177, 0.055); font-size: 9px; }
+.tag-explanation-source { display: flex; align-items: flex-start; gap: 7px; margin-top: 15px; color: var(--faint); font-size: 9px; line-height: 1.55; }
+.tag-explanation-source svg { flex: 0 0 auto; width: 14px; height: 14px; color: var(--positive); stroke-width: 1.25; }
+.tag-explanation-close { width: 100%; margin-top: 17px; padding: 9px 12px; border: 1px solid rgba(180, 211, 228, 0.22); border-radius: 10px; color: var(--text); background: rgba(180, 211, 228, 0.08); cursor: pointer; font-size: 11px; font-weight: 550; transition: border-color 160ms ease, background 160ms ease, color 160ms ease; }
+.tag-explanation-close:hover, .tag-explanation-close:focus-visible { border-color: rgba(97, 230, 177, 0.5); color: var(--positive); background: rgba(97, 230, 177, 0.1); outline: none; }

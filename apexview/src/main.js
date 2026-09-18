@@ -142,6 +142,8 @@ const state = {
   timelineTimer: null,
   timelinePlaying: false,
   snapshotRefreshTimer: null,
+  marketControlAvailable: null,
+  lastMarketRefresh: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -164,6 +166,10 @@ const dom = {
   snapshotTime: $("#snapshot-time"),
   marketTime: $("#market-time"),
   logicVersion: $("#logic-version"),
+  marketTransportStatus: $("#market-transport-status"),
+  marketChartStatus: $("#market-chart-status"),
+  marketResearchStatus: $("#market-research-status"),
+  marketPublicationStatus: $("#market-publication-status"),
   sourceContract: $("#source-contract"),
   activeCount: $("#active-count"),
   positiveCount: $("#positive-count"),
@@ -217,6 +223,15 @@ const dom = {
   tradeEv: $("#trade-ev"),
   tradePlanNote: $("#trade-plan-note"),
   tradeGateNote: $("#trade-gate-note"),
+  tagExplanation: $("#tag-explanation"),
+  tagExplanationGroup: $("#tag-explanation-group"),
+  tagExplanationLabel: $("#tag-explanation-label"),
+  tagExplanationScore: $("#tag-explanation-score"),
+  tagExplanationReason: $("#tag-explanation-reason"),
+  tagExplanationComponentsBlock: $("#tag-explanation-components-block"),
+  tagExplanationComponents: $("#tag-explanation-components"),
+  closeTagExplanation: $("#close-tag-explanation"),
+  closeTagExplanationFooter: $("#tag-explanation-close-footer"),
   timelinePlay: $("#timeline-play"),
 };
 
@@ -232,6 +247,7 @@ let backgroundLayer;
 let coreGroup;
 let selectedRing;
 let coreLabel;
+let tagExplanationReturnFocus;
 
 const polarityColors = {
   positive: 0x61e6b1,
@@ -528,6 +544,7 @@ function renderMarketChart(snapshot) {
   });
   const source = chart.source || {};
   const observation = snapshot?.market_observation || {};
+  const capabilities = observation.capabilities || source.capabilities || {};
   dom.chartInterval.textContent = `${String(chart.interval || "1D").toUpperCase()} · ${chart.coverage?.points || 0} BARS`;
   const freshness = observation.status || source.freshness || "unknown";
   const admission = String(observation.admission_status || source.admission_status || "").toUpperCase();
@@ -536,6 +553,8 @@ function renderMarketChart(snapshot) {
     source.name || "ไม่มีแหล่งข้อมูล",
     source.market_as_of ? `as of ${formatShortDate(source.market_as_of)}` : "",
     String(freshness).toUpperCase(),
+    capabilities.transport ? `TRANSPORT ${String(capabilities.transport).toUpperCase()}` : "",
+    capabilities.chart ? `CHART ${String(capabilities.chart).toUpperCase()}` : "",
     admission === "BLOCKED_PROVENANCE" ? "PROVENANCE BLOCKED" : admission === "PASS" ? "PROVENANCE PASS" : "",
     rights === "BLOCKED_NON_DISPLAY" ? "PRIVATE DISPLAY" : "",
   ].filter(Boolean).join(" · ");
@@ -1702,6 +1721,13 @@ function renderSummary(snapshot) {
   dom.snapshotTime.textContent = formatDate(snapshot.as_of?.snapshot_ts || snapshot.generated_at);
   dom.marketTime.textContent = formatDate(snapshot.as_of?.market_ts);
   dom.logicVersion.textContent = snapshot.logic_version || "ไม่ระบุ";
+  const observation = snapshot.market_observation || {};
+  const source = snapshot.market_chart?.source || {};
+  const capabilities = observation.capabilities || source.capabilities || {};
+  if (dom.marketTransportStatus) dom.marketTransportStatus.textContent = capabilities.transport || observation.transport_status || "UNKNOWN";
+  if (dom.marketChartStatus) dom.marketChartStatus.textContent = capabilities.chart || (observation.chart_renderable ? "READY" : "UNAVAILABLE");
+  if (dom.marketResearchStatus) dom.marketResearchStatus.textContent = capabilities.research || observation.research_admission_status || observation.admission_status || "UNKNOWN";
+  if (dom.marketPublicationStatus) dom.marketPublicationStatus.textContent = capabilities.publication || observation.publication_rights_status || observation.publication_status || "UNKNOWN";
   dom.sourceContract.textContent = snapshot.contract_version || SNAPSHOT_VERSION;
   dom.activeCount.textContent = `${tradeCount} VISIBLE${diagnosticCount ? ` · ${diagnosticCount} DIAGNOSTIC` : ""}`;
   dom.positiveCount.textContent = eyeCounts.passed;
@@ -1808,6 +1834,41 @@ function renderTradePlan(trade, snapshot) {
       : "Trade Map เป็นภาพอธิบายเท่านั้น และยังต้องผ่าน Risk Gate");
 }
 
+
+function openTagExplanation(tag, trigger = null) {
+  if (!dom.tagExplanation || !tag || typeof tag !== "object") return;
+  tagExplanationReturnFocus = trigger || document.activeElement;
+  const polarity = normalizePolarity(tag.polarity);
+  const score = numberOrNull(tag.score);
+  const weight = numberOrNull(tag.timeframe_weight_pct);
+  dom.tagExplanationGroup.textContent = labelForGroup(tag.group || "trade");
+  dom.tagExplanationLabel.textContent = tag.label || tag.code || "Trade factor";
+  dom.tagExplanationScore.className = `tag-explanation-score ${polarityClasses[polarity]}`;
+  dom.tagExplanationScore.textContent = [
+    score === null ? "คะแนนไม่ระบุ" : formatScore(score),
+    weight === null ? null : `น้ำหนัก ${weight.toFixed(0)}%`,
+  ].filter(Boolean).join(" · ");
+  dom.tagExplanationReason.textContent = String(tag.reason || "ไม่มีคำอธิบายจาก snapshot").trim() || "ไม่มีคำอธิบายจาก snapshot";
+  const components = Array.isArray(tag.components) ? tag.components.filter((component) => String(component || "").trim()) : [];
+  dom.tagExplanationComponents.replaceChildren();
+  dom.tagExplanationComponentsBlock.hidden = components.length === 0;
+  for (const component of components) {
+    const chip = document.createElement("span");
+    chip.textContent = component;
+    dom.tagExplanationComponents.append(chip);
+  }
+  dom.tagExplanation.hidden = false;
+  dom.closeTagExplanation?.focus({ preventScroll: true });
+}
+
+function closeTagExplanation() {
+  if (!dom.tagExplanation || dom.tagExplanation.hidden) return;
+  dom.tagExplanation.hidden = true;
+  const returnFocus = tagExplanationReturnFocus;
+  tagExplanationReturnFocus = null;
+  if (returnFocus?.isConnected && typeof returnFocus.focus === "function") returnFocus.focus({ preventScroll: true });
+}
+
 function renderTrade(snapshot) {
   const trade = snapshot.trade || {};
   const tags = tradeEyeTags(snapshot);
@@ -1832,7 +1893,8 @@ function renderTrade(snapshot) {
       const row = document.createElement("button");
       row.type = "button";
       row.className = `trade-tag ${tag.hard_blocker ? "is-blocker" : ""}`;
-      row.title = tag.reason || "";
+      row.title = tag.reason || "เปิดคำอธิบายปัจจัย";
+      row.setAttribute("aria-label", `อธิบาย ${tag.label || tag.code || "Trade factor"}`);
       const tagWeight = numberOrNull(tag.timeframe_weight_pct);
       const weightText = tagWeight === null ? "W--" : `W${tagWeight.toFixed(0)}%`;
       row.innerHTML = `
@@ -1840,10 +1902,7 @@ function renderTrade(snapshot) {
         <span>${escapeHtml(tag.label || tag.code || "Trade factor")}</span>
         <strong>${escapeHtml(formatScore(tag.score))} · ${escapeHtml(weightText)}</strong>
       `;
-      row.addEventListener("click", () => {
-        selectNode(tag.view_id);
-        $("#detail-panel").scrollIntoView({ behavior: state.motionPaused ? "instant" : "smooth", block: "center" });
-      });
+      row.addEventListener("click", () => openTagExplanation(tag, row));
       dom.tradeTagList.append(row);
     }
     if (diagnosticCount) {
@@ -1988,6 +2047,7 @@ async function loadTicker(ticker, { showLoading = true } = {}) {
   dom.tickerSelect.value = normalized;
   updateQueryTicker(normalized);
   clearError();
+  closeTagExplanation();
   clearSelection();
   if (showLoading) setLoading(true, `Loading ${normalized} snapshot`);
   try {
@@ -2021,10 +2081,51 @@ function isWebullObservation(snapshot) {
     || source.name === "webull_openapi";
 }
 
+function isWebullManifest(manifest = state.manifest) {
+  return String(manifest?.source?.kind || "").toLowerCase() === "webull_market_data"
+    || String(manifest?.source?.provider || "").toLowerCase() === "webull_openapi";
+}
+
+async function requestLocalMarketRefresh(ticker) {
+  if (!isWebullManifest() || state.marketControlAvailable === false) return false;
+  let response;
+  try {
+    response = await fetch("/api/market/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ ticker: String(ticker || state.ticker || "").toUpperCase() }),
+    });
+  } catch {
+    // Static/public ApexView has no private control route. Keep its normal
+    // snapshot refresh behavior without turning a missing route into an error.
+    state.marketControlAvailable = false;
+    return false;
+  }
+  if (response.status === 404 || response.status === 405) {
+    state.marketControlAvailable = false;
+    return false;
+  }
+  if (response.status === 429) {
+    state.marketControlAvailable = true;
+    state.lastMarketRefresh = await response.json().catch(() => ({ status: "rate_limited" }));
+    return false;
+  }
+  if (!response.ok) {
+    state.marketControlAvailable = true;
+    throw new Error(`Market refresh failed (${response.status})`);
+  }
+  state.marketControlAvailable = true;
+  state.lastMarketRefresh = await response.json();
+  return state.lastMarketRefresh?.status === "ready";
+}
+
 async function refreshCurrentView({ showLoading = true } = {}) {
   const current = state.ticker;
   try {
     await loadManifest(current);
+    await requestLocalMarketRefresh(current);
+    if (state.marketControlAvailable === true) await loadManifest(current);
     await loadTicker(state.ticker, { showLoading });
   } catch (error) {
     setError(error instanceof Error ? error.message : "Snapshot refresh failed");
@@ -2050,6 +2151,12 @@ function bindUi() {
   });
   $("#retry-button").addEventListener("click", () => loadTicker(state.ticker));
   $("#clear-selection").addEventListener("click", clearSelection);
+  dom.closeTagExplanation?.addEventListener("click", closeTagExplanation);
+  dom.closeTagExplanationFooter?.addEventListener("click", closeTagExplanation);
+  dom.tagExplanation?.querySelector("[data-close-tag-explanation]")?.addEventListener("click", closeTagExplanation);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeTagExplanation();
+  });
   $("#reset-camera").addEventListener("click", () => controls?.reset());
   $("#zoom-in").addEventListener("click", () => adjustZoom(-1.5));
   $("#zoom-out").addEventListener("click", () => adjustZoom(1.5));

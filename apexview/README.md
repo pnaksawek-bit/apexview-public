@@ -7,6 +7,15 @@ from Short Horizon, without taking ownership of any decision. Phase 8 adds
 backend-owned evidence replay, and Phase 9 adds a paper-only Trade Map with a
 fail-closed Cloud Risk Gate contract.
 
+## Canonical presentation
+
+This repository is the static/deployment mirror for the one active ApexView
+surface: **Quant Observatory**, identified by
+`APEXVIEW-OBSERVATORY-STYLE-v1`. The private `apexthinker` runtime mirrors this
+presentation contract and adds only its local Webull read-only transport; it
+must not select a separate Galaxy-era layout. Historical Galaxy source remains
+in Git history for auditability, not as an alternate product surface.
+
 ## Run
 
 ```powershell
