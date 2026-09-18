@@ -144,6 +144,7 @@ const state = {
   snapshotRefreshTimer: null,
   marketControlAvailable: null,
   lastMarketRefresh: null,
+  paperStatus: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -233,6 +234,7 @@ const dom = {
   closeTagExplanation: $("#close-tag-explanation"),
   closeTagExplanationFooter: $("#tag-explanation-close-footer"),
   timelinePlay: $("#timeline-play"),
+  paperModeNote: $("#operating-mode-note"),
 };
 
 let scene;
@@ -794,6 +796,33 @@ function renderPublicationStatus() {
   const notice = $("#publication-notice");
   notice.hidden = !["unavailable", "partial"].includes(publication.kind);
   notice.querySelector("span").textContent = publication.note;
+}
+
+function renderPaperStatus(payload) {
+  const status = String(payload?.status || "NOT_CONNECTED").toUpperCase();
+  const delivery = payload?.paper_delivery || {};
+  const counts = delivery.counts || {};
+  const delivered = Number(counts.delivered || 0);
+  const attention = Number(delivery.retry_required || 0) + Number(counts.sending || 0);
+  if (!dom.paperModeNote) return;
+  if (status === "READY") {
+    dom.paperModeNote.textContent = attention
+      ? `Paper ledger พร้อม · ACK ${delivered} · ต้องตรวจ ${attention} รายการ`
+      : `Paper ledger พร้อม · ACK ${delivered} รายการ · ไม่มีคำสั่ง broker`;
+  } else if (status === "BLOCKED") {
+    dom.paperModeNote.textContent = "Paper ledger อ่านไม่ได้ · fail-closed · ไม่มีคำสั่ง broker";
+  } else {
+    dom.paperModeNote.textContent = "Paper ledger ยังไม่เชื่อม · หน้านี้ไม่ส่งคำสั่ง broker";
+  }
+}
+
+async function loadPaperStatus() {
+  try {
+    state.paperStatus = await fetchJson("/api/paper/status");
+  } catch {
+    state.paperStatus = { status: "NOT_CONNECTED" };
+  }
+  renderPaperStatus(state.paperStatus);
 }
 
 function setWorkspaceView(view) {
@@ -2124,6 +2153,7 @@ async function refreshCurrentView({ showLoading = true } = {}) {
   const current = state.ticker;
   try {
     await loadManifest(current);
+    await loadPaperStatus();
     await requestLocalMarketRefresh(current);
     if (state.marketControlAvailable === true) await loadManifest(current);
     await loadTicker(state.ticker, { showLoading });
@@ -2240,6 +2270,7 @@ async function boot() {
   initScene();
   bindUi();
   await loadManifest();
+  await loadPaperStatus();
   await loadTicker(state.ticker);
 }
 
