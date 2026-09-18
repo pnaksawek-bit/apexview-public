@@ -95,6 +95,7 @@ const TRADE_EYE_EVENT_TYPES = new Set([
 const DEFAULT_TICKER = "RKLB";
 const MAX_RENDER_TAGS = 12;
 const MAX_VISIBLE_TRADE_TAGS = 6;
+const SNAPSHOT_REFRESH_INTERVAL_MS = 60_000;
 
 const DEFAULT_MANIFEST = {
   contract_version: UNIVERSE_VERSION,
@@ -140,6 +141,7 @@ const state = {
   timelineIndex: -1,
   timelineTimer: null,
   timelinePlaying: false,
+  snapshotRefreshTimer: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -525,8 +527,16 @@ function renderMarketChart(snapshot) {
     button.classList.toggle("is-active", button.dataset.chartRange === state.chartRange);
   });
   const source = chart.source || {};
+  const observation = snapshot?.market_observation || {};
   dom.chartInterval.textContent = `${String(chart.interval || "1D").toUpperCase()} · ${chart.coverage?.points || 0} BARS`;
-  dom.chartSource.textContent = `${source.name || "ไม่มีแหล่งข้อมูล"}${source.market_as_of ? ` · as of ${formatShortDate(source.market_as_of)}` : ""}`;
+  const freshness = observation.status || source.freshness || "unknown";
+  const rights = observation.publication_status || source.publication_status || "";
+  dom.chartSource.textContent = [
+    source.name || "ไม่มีแหล่งข้อมูล",
+    source.market_as_of ? `as of ${formatShortDate(source.market_as_of)}` : "",
+    String(freshness).toUpperCase(),
+    rights === "BLOCKED_NON_DISPLAY" ? "PRIVATE DISPLAY" : "",
+  ].filter(Boolean).join(" · ");
   const points = selectedChartPoints();
   const first = points[0];
   const last = points.at(-1);
@@ -725,7 +735,7 @@ function snapshotUrlFor(ticker) {
   return assetUrl(item?.snapshot_url || `/data/snapshots/${encodeURIComponent(ticker)}.json`);
 }
 
-async function loadManifest() {
+async function loadManifest(preferredTicker = "") {
   try {
     const manifest = await fetchJson(assetUrl("/data/manifest.json"));
     if (manifest?.contract_version !== UNIVERSE_VERSION || manifest.read_only !== true || !Array.isArray(manifest.stocks)) {
@@ -739,8 +749,9 @@ async function loadManifest() {
   }
   const queryTicker = new URLSearchParams(window.location.search).get("ticker");
   const available = getManifestOptions(state.manifest).map((item) => item.ticker);
-  state.ticker = available.includes(String(queryTicker || "").toUpperCase())
-    ? String(queryTicker).toUpperCase()
+  const preferred = String(preferredTicker || queryTicker || "").toUpperCase();
+  state.ticker = available.includes(preferred)
+    ? preferred
     : available[0] || DEFAULT_TICKER;
   populateTickerSelect();
   renderTradeDesk();
@@ -1965,15 +1976,18 @@ function renderEvents(snapshot) {
   updateTimelineControls();
 }
 
-async function loadTicker(ticker) {
+async function loadTicker(ticker, { showLoading = true } = {}) {
   const requestId = ++state.snapshotRequest;
   const normalized = String(ticker || DEFAULT_TICKER).toUpperCase();
+  if (state.manifestLoaded && getManifestOptions(state.manifest).length === 0) {
+    throw new Error("No published market snapshot is available");
+  }
   state.ticker = normalized;
   dom.tickerSelect.value = normalized;
   updateQueryTicker(normalized);
   clearError();
   clearSelection();
-  setLoading(true, `Loading ${normalized} snapshot`);
+  if (showLoading) setLoading(true, `Loading ${normalized} snapshot`);
   try {
     const snapshot = validateSnapshot(await fetchJson(snapshotUrlFor(normalized)), normalized);
     if (requestId !== state.snapshotRequest) return;
@@ -1997,6 +2011,24 @@ async function loadTicker(ticker) {
   }
 }
 
+function isWebullObservation(snapshot) {
+  const observation = snapshot?.market_observation || {};
+  const source = snapshot?.market_chart?.source || {};
+  return observation.source === "webull_market_data"
+    || source.name === "Webull OpenAPI"
+    || source.name === "webull_openapi";
+}
+
+async function refreshCurrentView({ showLoading = true } = {}) {
+  const current = state.ticker;
+  try {
+    await loadManifest(current);
+    await loadTicker(state.ticker, { showLoading });
+  } catch (error) {
+    setError(error instanceof Error ? error.message : "Snapshot refresh failed");
+  }
+}
+
 function adjustZoom(delta) {
   if (!camera || !controls) return;
   const direction = camera.position.clone().sub(controls.target).normalize();
@@ -2011,7 +2043,7 @@ function bindUi() {
     const button = $("#refresh-button");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
-    try { await loadManifest(); await loadTicker(state.ticker); }
+    try { await refreshCurrentView({ showLoading: true }); }
     finally { button.disabled = false; button.removeAttribute("aria-busy"); }
   });
   $("#retry-button").addEventListener("click", () => loadTicker(state.ticker));
@@ -2086,6 +2118,10 @@ function bindUi() {
   setInterval(() => {
     dom.clock.textContent = new Date().toLocaleTimeString("en-GB", { hour12: false });
   }, 1000);
+  state.snapshotRefreshTimer = window.setInterval(() => {
+    if (document.hidden || !isWebullObservation(state.snapshot)) return;
+    refreshCurrentView({ showLoading: false });
+  }, SNAPSHOT_REFRESH_INTERVAL_MS);
   const chartObserver = new ResizeObserver(() => drawMarketChart());
   chartObserver.observe(dom.chartWrap);
 }
