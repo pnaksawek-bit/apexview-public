@@ -148,6 +148,7 @@ const state = {
   paperTransportSession: null,
   paperCycle: { status: "BLOCKED", reason: "กำลังตรวจ private Paper runtime" },
   paperCyclePolling: false,
+  paperConfirmationPollingTimer: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -241,6 +242,9 @@ const dom = {
   paperCycleStatus: $("#paper-cycle-status"),
   paperCycleReason: $("#paper-cycle-reason"),
   paperCycleLaunch: $("#paper-cycle-launch"),
+  paperConfirmationStatus: $("#paper-confirmation-status"),
+  paperConfirmationLineage: $("#paper-confirmation-lineage"),
+  paperLifecycleReadout: $("#paper-lifecycle-readout"),
   startPaperCycle: $("#start-paper-cycle"),
 };
 
@@ -825,6 +829,44 @@ function renderPaperStatus(payload) {
   const attention = Number(delivery.retry_required || 0) + Number(counts.sending || 0);
   const account = delivery.paper_account || {};
   const accountStatus = String(account.status || "UNKNOWN").toUpperCase();
+  const confirmation = (delivery.confirmations || [])[0] || {};
+  const confirmationStatus = String(confirmation.confirmation_display_status || "NO PROPOSAL").toUpperCase();
+  const lifecycle = payload?.paper_lifecycle || {};
+  const lifecycleAccount = lifecycle.account || {};
+  const lifecycleSummary = lifecycle.lifecycle || {};
+  const velocity = lifecycle.capital_velocity || {};
+  if (dom.paperConfirmationStatus) {
+    dom.paperConfirmationStatus.textContent = confirmationStatus;
+    dom.paperConfirmationStatus.dataset.state = confirmationStatus;
+  }
+  if (dom.paperConfirmationLineage) {
+    const lineage = confirmation.lineage || {};
+    const compact = (value) => {
+      const text = String(value || "").trim();
+      return text ? (text.length > 14 ? `${text.slice(0, 6)}…${text.slice(-5)}` : text) : "—";
+    };
+    const confirmationId = compact(confirmation.confirmation_id);
+    const line = confirmationId === "—"
+      ? "ยังไม่มี proposal จาก Paper journal"
+      : `confirmation ${confirmationId} · request ${compact(lineage.request_id)} · launch ${compact(lineage.launch_id)} · cycle ${compact(lineage.cycle_id)} · snapshot ${compact(lineage.snapshot_id)}`;
+    dom.paperConfirmationLineage.textContent = line;
+  }
+  if (dom.paperLifecycleReadout) {
+    const lifecycleStatus = String(lifecycle.status || "UNKNOWN").toUpperCase();
+    const closed = Number(lifecycleSummary.closed_positions || 0);
+    const net = numberOrNull(lifecycleAccount.realized_pnl);
+    const cost = numberOrNull(lifecycleAccount.realized_cost);
+    const cycles = numberOrNull(velocity.position_recycling_velocity_cycles_per_day);
+    if (lifecycleStatus === "MEASURED") {
+      dom.paperLifecycleReadout.textContent = `ปิดจริง ${closed} รายการ · net ${net === null ? "--" : `${net >= 0 ? "+" : ""}${net.toFixed(2)} USD`} · cost ${cost === null ? "--" : `${cost.toFixed(2)} USD`} · velocity ${cycles === null ? "--" : `${cycles.toFixed(3)} cycles/day`}`;
+    } else if (lifecycleStatus === "NO_LIFECYCLE") {
+      dom.paperLifecycleReadout.textContent = "ยังไม่มี order lifecycle ใน Paper journal · ไม่ตีความเป็นกำไรศูนย์";
+    } else if (lifecycleStatus === "NOT_MEASURED_NO_CLOSED_POSITION") {
+      dom.paperLifecycleReadout.textContent = "มีสถานะ Paper แต่ยังไม่มีการปิดจริง · velocity ยังไม่วัด";
+    } else {
+      dom.paperLifecycleReadout.textContent = String(lifecycle.reason || "ผลลัพธ์ Paper ยังอ่านไม่ได้").slice(0, 180);
+    }
+  }
   if (!dom.paperModeNote) return;
   if (status === "READY") {
     const accountLabel = accountStatus === "ATTESTED"
@@ -839,6 +881,17 @@ function renderPaperStatus(payload) {
     dom.paperModeNote.textContent = "Paper ledger อ่านไม่ได้ · fail-closed · ไม่มีคำสั่ง broker";
   } else {
     dom.paperModeNote.textContent = "Paper ledger ยังไม่เชื่อม · หน้านี้ไม่ส่งคำสั่ง broker";
+  }
+  const waiting = confirmationStatus === "WAITING_CONFIRMATION";
+  if (waiting) {
+    if (!state.paperConfirmationPollingTimer) {
+      state.paperConfirmationPollingTimer = window.setInterval(() => {
+        if (!document.hidden) loadPaperStatus();
+      }, 3000);
+    }
+  } else if (state.paperConfirmationPollingTimer) {
+    window.clearInterval(state.paperConfirmationPollingTimer);
+    state.paperConfirmationPollingTimer = null;
   }
 }
 
@@ -945,6 +998,7 @@ async function pollPaperCycle(launchId) {
     });
     state.paperCycle = payload;
     renderPaperCycle();
+    await loadPaperStatus();
     if (paperCycleUiStatus(payload.status) !== "RUNNING") return;
   }
   state.paperCycle = {
@@ -990,6 +1044,7 @@ async function startPaperCycle() {
     };
   } finally {
     state.paperCyclePolling = false;
+    await loadPaperStatus();
     renderPaperCycle();
   }
 }
