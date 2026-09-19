@@ -827,8 +827,11 @@ function renderPaperStatus(payload) {
   const counts = delivery.counts || {};
   const delivered = Number(counts.delivered || 0);
   const attention = Number(delivery.retry_required || 0) + Number(counts.sending || 0);
-  const account = delivery.paper_account || {};
+  const internalAccount = delivery.internal_paper_account || {};
+  const hasInternalAccount = internalAccount.status && String(internalAccount.status).toUpperCase() !== "UNKNOWN";
+  const account = hasInternalAccount ? internalAccount : (delivery.paper_account || {});
   const accountStatus = String(account.status || "UNKNOWN").toUpperCase();
+  const accountAuthority = hasInternalAccount ? "internal" : "provider";
   const confirmation = (delivery.confirmations || [])[0] || {};
   const confirmationStatus = String(confirmation.confirmation_display_status || "NO PROPOSAL").toUpperCase();
   const lifecycle = payload?.paper_lifecycle || {};
@@ -869,8 +872,10 @@ function renderPaperStatus(payload) {
   }
   if (!dom.paperModeNote) return;
   if (status === "READY") {
-    const accountLabel = accountStatus === "ATTESTED"
-      ? "บัญชี Paper ยืนยันแล้ว"
+    const accountLabel = accountAuthority === "internal" && accountStatus === "ADMITTED"
+      ? "บัญชี Paper ภายในยืนยันแล้ว"
+      : accountAuthority === "provider" && accountStatus === "ATTESTED"
+        ? "บัญชี Paper จาก provider ยืนยันแล้ว"
       : accountStatus === "MIXED"
         ? "บัญชี Paper หลายชุด · ต้องตรวจ"
         : "บัญชี Paper ยังไม่ยืนยัน";
