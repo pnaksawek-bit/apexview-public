@@ -96,6 +96,11 @@ const DEFAULT_TICKER = "RKLB";
 const MAX_RENDER_TAGS = 12;
 const MAX_VISIBLE_TRADE_TAGS = 6;
 const SNAPSHOT_REFRESH_INTERVAL_MS = 60_000;
+const PAPER_STATUS_RETRY_MAX_MS = 15_000;
+const PAPER_SNAPSHOT_RETRY_MAX = 5;
+const PAPER_CYCLE_POLL_INTERVAL_MS = 1_000;
+const PAPER_CYCLE_POLL_MAX_ATTEMPTS = 120;
+const PAPER_CYCLE_STORAGE_KEY = "apexview.paper-cycle.v1";
 
 const DEFAULT_MANIFEST = {
   contract_version: UNIVERSE_VERSION,
@@ -149,6 +154,13 @@ const state = {
   paperCycle: { status: "BLOCKED", reason: "กำลังตรวจ private Paper runtime" },
   paperCyclePolling: false,
   paperConfirmationPollingTimer: null,
+  paperStatusRetryTimer: null,
+  paperStatusRetryAttempt: 0,
+  paperTransportRetryTimer: null,
+  paperTransportRetryAttempt: 0,
+  paperCycleResumeTimer: null,
+  paperSnapshotRetryTimer: null,
+  paperSnapshotRetryAttempt: 0,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -821,7 +833,96 @@ function renderPublicationStatus() {
   notice.querySelector("span").textContent = publication.note;
 }
 
+function persistPaperCycle(cycle) {
+  const launchId = String(cycle?.launch_id || "").trim();
+  if (!launchId) return;
+  const safe = {};
+  for (const key of [
+    "contract_version", "launch_id", "request_id", "cycle_id", "status",
+    "status_source", "status_reason", "source_identity", "counts",
+    "last_durable_event", "next_action",
+  ]) {
+    if (cycle[key] !== undefined) safe[key] = cycle[key];
+  }
+  try { window.localStorage.setItem(PAPER_CYCLE_STORAGE_KEY, JSON.stringify(safe)); } catch { /* private browser storage may be disabled */ }
+}
+
+function restorePaperCycle() {
+  try {
+    const raw = window.localStorage.getItem(PAPER_CYCLE_STORAGE_KEY);
+    const saved = raw ? JSON.parse(raw) : null;
+    if (saved && typeof saved === "object" && String(saved.launch_id || "").trim()) {
+      state.paperCycle = saved;
+    }
+  } catch { /* a bad local recovery record must never block the page */ }
+}
+
+function syncPaperCycleFromStatus(payload) {
+  if (state.paperCyclePolling) return;
+  const launch = payload?.paper_launch;
+  if (launch?.launch_id) {
+    state.paperCycle = launch;
+    persistPaperCycle(launch);
+    return;
+  }
+  const confirmation = (payload?.paper_delivery?.confirmations || [])[0] || {};
+  const lineage = confirmation.lineage || {};
+  if (!lineage.launch_id) return;
+  const display = String(confirmation.confirmation_display_status || "").toUpperCase();
+  const status = display === "WAITING_CONFIRMATION" ? "WAITING_CONFIRMATION" : "PAPER_RESULT";
+  const recovered = {
+    status,
+    status_reason: String(confirmation.confirmation_reason || "Paper launch recovered from journal").trim(),
+    request_id: lineage.request_id || "",
+    launch_id: lineage.launch_id,
+    cycle_id: lineage.cycle_id || "",
+    snapshot_id: lineage.snapshot_id || "",
+  };
+  state.paperCycle = recovered;
+  persistPaperCycle(recovered);
+}
+
+function schedulePaperStatusRetry() {
+  if (state.paperStatusRetryTimer) return;
+  const attempt = state.paperStatusRetryAttempt;
+  const delay = Math.min(PAPER_STATUS_RETRY_MAX_MS, 1_000 * (2 ** Math.min(attempt, 4)));
+  state.paperStatusRetryAttempt += 1;
+  state.paperStatusRetryTimer = window.setTimeout(() => {
+    state.paperStatusRetryTimer = null;
+    if (document.hidden) { schedulePaperStatusRetry(); return; }
+    loadPaperStatus();
+  }, delay);
+}
+
+function schedulePaperTransportRetry() {
+  if (state.paperTransportRetryTimer || state.paperTransportRetryAttempt >= PAPER_SNAPSHOT_RETRY_MAX) return;
+  const attempt = state.paperTransportRetryAttempt;
+  const delay = Math.min(PAPER_STATUS_RETRY_MAX_MS, 1_000 * (2 ** Math.min(attempt, 4)));
+  state.paperTransportRetryAttempt += 1;
+  state.paperTransportRetryTimer = window.setTimeout(() => {
+    state.paperTransportRetryTimer = null;
+    if (document.hidden) { schedulePaperTransportRetry(); return; }
+    loadPaperTransportSession();
+  }, delay);
+}
+
+function schedulePaperCycleResume(launchId) {
+  if (!launchId || state.paperCycleResumeTimer) return;
+  state.paperCycleResumeTimer = window.setTimeout(async () => {
+    state.paperCycleResumeTimer = null;
+    if (document.hidden || state.paperCyclePolling || !state.paperTransportSession) return;
+    state.paperCyclePolling = true;
+    try { await pollPaperCycle(launchId); }
+    finally {
+      state.paperCyclePolling = false;
+      await loadPaperStatus();
+      renderPaperCycle();
+    }
+  }, PAPER_CYCLE_POLL_INTERVAL_MS);
+}
+
 function renderPaperStatus(payload) {
+  syncPaperCycleFromStatus(payload);
   const status = String(payload?.status || "NOT_CONNECTED").toUpperCase();
   const delivery = payload?.paper_delivery || {};
   const counts = delivery.counts || {};
@@ -873,7 +974,7 @@ function renderPaperStatus(payload) {
   if (!dom.paperModeNote) return;
   if (status === "READY") {
     const accountLabel = accountAuthority === "internal" && accountStatus === "ADMITTED"
-      ? "บัญชี Paper ภายในยืนยันแล้ว"
+      ? "บัญชี Paper ภายในจำลองยืนยันแล้ว"
       : accountAuthority === "provider" && accountStatus === "ATTESTED"
         ? "บัญชี Paper จาก provider ยืนยันแล้ว"
       : accountStatus === "MIXED"
@@ -903,10 +1004,20 @@ function renderPaperStatus(payload) {
 async function loadPaperStatus() {
   try {
     state.paperStatus = await fetchJson("/api/paper/status");
+    state.paperStatusRetryAttempt = 0;
+    if (state.paperStatusRetryTimer) {
+      window.clearTimeout(state.paperStatusRetryTimer);
+      state.paperStatusRetryTimer = null;
+    }
   } catch {
-    state.paperStatus = { status: "NOT_CONNECTED" };
+    // Preserve the last known good projection during a transient fetch error;
+    // replacing it with NOT_CONNECTED made the UI contradict a healthy ledger
+    // and stopped confirmation polling permanently.
+    if (!state.paperStatus) state.paperStatus = { status: "NOT_CONNECTED" };
+    schedulePaperStatusRetry();
   }
   renderPaperStatus(state.paperStatus);
+  renderPaperCycle();
 }
 
 function paperCycleUiStatus(status) {
@@ -932,8 +1043,15 @@ function paperCycleUiStatus(status) {
 function paperCycleReason(payload) {
   const reason = String(payload?.status_reason || payload?.reason || "").trim();
   const nextAction = String(payload?.next_action || "").trim();
-  if (reason && nextAction) return `${reason} · ${nextAction}`;
-  return reason || nextAction || "ยังไม่มีเหตุผลจาก Paper runtime";
+  const profiles = payload?.source_identity?.candidate_source_profiles || [];
+  const isFixture = Array.isArray(profiles) && profiles.some((profile) => {
+    const sourceClass = String(profile?.source_class || "").toUpperCase();
+    const role = String(profile?.role || "").toLowerCase();
+    return sourceClass === "INTERNAL_SIMULATION" || role.includes("fixture") || profile?.market_evidence === false;
+  });
+  const sourceNote = isFixture ? "transport fixture · ไม่ใช่ market evidence" : "";
+  const parts = [reason, nextAction, sourceNote].filter(Boolean);
+  return parts.join(" · ") || "ยังไม่มีเหตุผลจาก Paper runtime";
 }
 
 function renderPaperCycle() {
@@ -959,16 +1077,46 @@ async function loadPaperTransportSession() {
     if (state.paperTransportSession?.status !== "READY") {
       throw new Error("paper browser session is not ready");
     }
-    state.paperCycle = { status: "BLOCKED", reason: "พร้อมเริ่มรอบ Paper · กดปุ่มเพื่อเริ่ม" };
+    state.paperTransportRetryAttempt = 0;
+    if (state.paperTransportRetryTimer) {
+      window.clearTimeout(state.paperTransportRetryTimer);
+      state.paperTransportRetryTimer = null;
+    }
+    if (!state.paperCycle?.launch_id) {
+      state.paperCycle = { status: "BLOCKED", reason: "พร้อมเริ่มรอบ Paper · กดปุ่มเพื่อเริ่ม" };
+    }
   } catch (error) {
     const payload = error?.payload || {};
     state.paperTransportSession = null;
-    state.paperCycle = {
-      status: "BLOCKED",
-      reason: String(payload.reason || "Paper cycle ยังไม่พร้อม · private launcher ยังไม่ได้ตั้งค่า").trim(),
-    };
+    if (!state.paperCycle?.launch_id) {
+      state.paperCycle = {
+        status: "BLOCKED",
+        reason: String(payload.reason || "Paper cycle ยังไม่พร้อม · private launcher ยังไม่ได้ตั้งค่า").trim(),
+      };
+    }
+    schedulePaperTransportRetry();
   }
   renderPaperCycle();
+  if (
+    state.paperTransportSession?.status === "READY"
+    && state.paperCycle?.launch_id
+    && paperCycleUiStatus(state.paperCycle.status) === "RUNNING"
+    && !state.paperCyclePolling
+  ) {
+    state.paperCyclePolling = true;
+    try { await pollPaperCycle(state.paperCycle.launch_id); }
+    catch (error) {
+      state.paperCycle = {
+        ...state.paperCycle,
+        status: "BLOCKED",
+        status_reason: String(error?.message || "Paper status recovery failed").trim(),
+      };
+    } finally {
+      state.paperCyclePolling = false;
+      await loadPaperStatus();
+      renderPaperCycle();
+    }
+  }
 }
 
 function paperRequestId() {
@@ -996,22 +1144,35 @@ function sleep(milliseconds) {
 
 async function pollPaperCycle(launchId) {
   const encoded = encodeURIComponent(String(launchId || ""));
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (attempt > 0) await sleep(1000);
-    const payload = await fetchPaperJson(`/v1/private/paper/launch/${encoded}`, {
-      headers: paperTransportHeaders(),
-    });
-    state.paperCycle = payload;
-    renderPaperCycle();
-    await loadPaperStatus();
-    if (paperCycleUiStatus(payload.status) !== "RUNNING") return;
+  for (let attempt = 0; attempt < PAPER_CYCLE_POLL_MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(PAPER_CYCLE_POLL_INTERVAL_MS);
+    try {
+      const payload = await fetchPaperJson(`/v1/private/paper/launch/${encoded}`, {
+        headers: paperTransportHeaders(),
+      });
+      state.paperCycle = payload;
+      persistPaperCycle(payload);
+      renderPaperCycle();
+      await loadPaperStatus();
+      if (paperCycleUiStatus(payload.status) !== "RUNNING") return;
+    } catch (error) {
+      if ([401, 403, 404].includes(Number(error?.status))) throw error;
+      state.paperCycle = {
+        ...state.paperCycle,
+        status: "RUNNING",
+        status_reason: "กำลังเชื่อมต่อ Paper runtime ใหม่ · จะติดตามต่ออัตโนมัติ",
+      };
+      renderPaperCycle();
+    }
   }
   state.paperCycle = {
     ...state.paperCycle,
     status: "RUNNING",
     status_reason: "รอบ Paper ยังทำงานอยู่ · จะไม่เริ่มซ้ำจนกว่าจะมีผลจาก ledger",
   };
+  persistPaperCycle(state.paperCycle);
   renderPaperCycle();
+  schedulePaperCycleResume(launchId);
 }
 
 async function startPaperCycle() {
@@ -1038,6 +1199,7 @@ async function startPaperCycle() {
       }),
     });
     state.paperCycle = payload;
+    persistPaperCycle(payload);
     renderPaperCycle();
     if (payload.launch_id) await pollPaperCycle(payload.launch_id);
   } catch (error) {
@@ -2025,6 +2187,18 @@ function tradeEyeMovementEvents(snapshot) {
   return Array.isArray(timeline.events) ? timeline.events.filter((event) => allowed.has(String(event?.event_type || ""))) : [];
 }
 
+function scheduleSnapshotRetry() {
+  if (state.paperSnapshotRetryTimer || state.paperSnapshotRetryAttempt >= PAPER_SNAPSHOT_RETRY_MAX) return;
+  const attempt = state.paperSnapshotRetryAttempt;
+  const delay = Math.min(PAPER_STATUS_RETRY_MAX_MS, 1_000 * (2 ** Math.min(attempt, 4)));
+  state.paperSnapshotRetryAttempt += 1;
+  state.paperSnapshotRetryTimer = window.setTimeout(async () => {
+    state.paperSnapshotRetryTimer = null;
+    if (document.hidden) { scheduleSnapshotRetry(); return; }
+    await refreshCurrentView({ showLoading: false });
+  }, delay);
+}
+
 function renderTradePlan(trade, snapshot) {
   const rawTimeframe = trade?.timeframe;
   const timeframe = rawTimeframe && typeof rawTimeframe === "object"
@@ -2317,6 +2491,11 @@ async function loadTicker(ticker, { showLoading = true } = {}) {
     renderTrade(snapshot);
     renderEvents(snapshot);
     renderGalaxy(snapshot);
+    state.paperSnapshotRetryAttempt = 0;
+    if (state.paperSnapshotRetryTimer) {
+      window.clearTimeout(state.paperSnapshotRetryTimer);
+      state.paperSnapshotRetryTimer = null;
+    }
     setLoading(false);
   } catch (error) {
     if (requestId !== state.snapshotRequest) return;
@@ -2328,6 +2507,7 @@ async function loadTicker(ticker, { showLoading = true } = {}) {
     renderEvents({});
     dom.tradeEyeEmpty.hidden = true;
     setError(error instanceof Error ? error.message : "Snapshot unavailable");
+    scheduleSnapshotRetry();
   }
 }
 
@@ -2357,7 +2537,7 @@ async function requestLocalMarketRefresh(ticker) {
   } catch {
     // Static/public ApexView has no private control route. Keep its normal
     // snapshot refresh behavior without turning a missing route into an error.
-    state.marketControlAvailable = false;
+    state.marketControlAvailable = null;
     return false;
   }
   if (response.status === 404 || response.status === 405) {
@@ -2499,6 +2679,7 @@ async function boot() {
   createIcons({ icons: APP_ICONS });
   initScene();
   bindUi();
+  restorePaperCycle();
   await loadManifest();
   await loadPaperStatus();
   await loadPaperTransportSession();
