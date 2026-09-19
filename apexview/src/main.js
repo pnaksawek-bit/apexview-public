@@ -145,6 +145,9 @@ const state = {
   marketControlAvailable: null,
   lastMarketRefresh: null,
   paperStatus: null,
+  paperTransportSession: null,
+  paperCycle: { status: "BLOCKED", reason: "กำลังตรวจ private Paper runtime" },
+  paperCyclePolling: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -235,6 +238,10 @@ const dom = {
   closeTagExplanationFooter: $("#tag-explanation-close-footer"),
   timelinePlay: $("#timeline-play"),
   paperModeNote: $("#operating-mode-note"),
+  paperCycleStatus: $("#paper-cycle-status"),
+  paperCycleReason: $("#paper-cycle-reason"),
+  paperCycleLaunch: $("#paper-cycle-launch"),
+  startPaperCycle: $("#start-paper-cycle"),
 };
 
 let scene;
@@ -715,6 +722,18 @@ async function fetchJson(url) {
   return response.json();
 }
 
+async function fetchPaperJson(url, options = {}) {
+  const response = await fetch(url, { cache: "no-store", ...options });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload?.reason || payload?.error?.message || `${response.status} ${response.statusText}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
 function getManifestOptions(manifest) {
   const options = [];
   for (const item of manifest.stocks || []) {
@@ -830,6 +849,149 @@ async function loadPaperStatus() {
     state.paperStatus = { status: "NOT_CONNECTED" };
   }
   renderPaperStatus(state.paperStatus);
+}
+
+function paperCycleUiStatus(status) {
+  switch (String(status || "").toUpperCase()) {
+    case "ACCEPTED":
+    case "RUNNING":
+      return "RUNNING";
+    case "NO_ADMISSIBLE_EDGE":
+      return "NO_CANDIDATE";
+    case "WAITING_CONFIRMATION":
+      return "WAITING_CONFIRMATION";
+    case "PAPER_RESULT":
+      return "COMPLETED";
+    case "BLOCKED_DATA":
+    case "FAILED_RECOVERABLE":
+    case "RISK_REJECTED":
+      return "BLOCKED";
+    default:
+      return "BLOCKED";
+  }
+}
+
+function paperCycleReason(payload) {
+  const reason = String(payload?.status_reason || payload?.reason || "").trim();
+  const nextAction = String(payload?.next_action || "").trim();
+  if (reason && nextAction) return `${reason} · ${nextAction}`;
+  return reason || nextAction || "ยังไม่มีเหตุผลจาก Paper runtime";
+}
+
+function renderPaperCycle() {
+  if (!dom.paperCycleStatus || !dom.startPaperCycle) return;
+  const rawStatus = String(state.paperCycle?.status || "BLOCKED").toUpperCase();
+  const uiStatus = paperCycleUiStatus(rawStatus);
+  const configured = state.paperTransportSession?.status === "READY";
+  const reason = configured
+    ? paperCycleReason(state.paperCycle)
+    : String(state.paperCycle?.reason || "Paper cycle ยังไม่ถูกผูกกับ private launcher");
+  dom.paperCycleStatus.textContent = uiStatus;
+  dom.paperCycleStatus.dataset.state = uiStatus;
+  dom.paperCycleReason.textContent = reason;
+  const launchId = String(state.paperCycle?.launch_id || "").trim();
+  dom.paperCycleLaunch.textContent = launchId ? `launch ${launchId}` : "";
+  dom.startPaperCycle.disabled = !configured || state.paperCyclePolling || uiStatus === "RUNNING";
+  dom.startPaperCycle.setAttribute("aria-busy", state.paperCyclePolling ? "true" : "false");
+}
+
+async function loadPaperTransportSession() {
+  try {
+    state.paperTransportSession = await fetchPaperJson("/api/paper/transport-session");
+    if (state.paperTransportSession?.status !== "READY") {
+      throw new Error("paper browser session is not ready");
+    }
+    state.paperCycle = { status: "BLOCKED", reason: "พร้อมเริ่มรอบ Paper · กดปุ่มเพื่อเริ่ม" };
+  } catch (error) {
+    const payload = error?.payload || {};
+    state.paperTransportSession = null;
+    state.paperCycle = {
+      status: "BLOCKED",
+      reason: String(payload.reason || "Paper cycle ยังไม่พร้อม · private launcher ยังไม่ได้ตั้งค่า").trim(),
+    };
+  }
+  renderPaperCycle();
+}
+
+function paperRequestId() {
+  if (window.crypto?.randomUUID) return `apexview-${window.crypto.randomUUID()}`;
+  return `apexview-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function paperTransportHeaders({ includeCsrf = false, requestId = "" } = {}) {
+  const session = state.paperTransportSession || {};
+  const headers = {
+    Accept: "application/json",
+    Authorization: `Bearer ${session.bearer_token || ""}`,
+  };
+  if (includeCsrf) {
+    headers["Content-Type"] = "application/json";
+    headers["X-CSRF-Token"] = session.csrf_token || "";
+    headers["Idempotency-Key"] = requestId;
+  }
+  return headers;
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function pollPaperCycle(launchId) {
+  const encoded = encodeURIComponent(String(launchId || ""));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (attempt > 0) await sleep(1000);
+    const payload = await fetchPaperJson(`/v1/private/paper/launch/${encoded}`, {
+      headers: paperTransportHeaders(),
+    });
+    state.paperCycle = payload;
+    renderPaperCycle();
+    if (paperCycleUiStatus(payload.status) !== "RUNNING") return;
+  }
+  state.paperCycle = {
+    ...state.paperCycle,
+    status: "RUNNING",
+    status_reason: "รอบ Paper ยังทำงานอยู่ · จะไม่เริ่มซ้ำจนกว่าจะมีผลจาก ledger",
+  };
+  renderPaperCycle();
+}
+
+async function startPaperCycle() {
+  if (state.paperCyclePolling || state.paperTransportSession?.status !== "READY") return;
+  const requestId = paperRequestId();
+  state.paperCyclePolling = true;
+  state.paperCycle = {
+    status: "RUNNING",
+    status_reason: "รับคำขอแล้ว · กำลังรอผลจาก Paper orchestrator",
+    request_id: requestId,
+  };
+  renderPaperCycle();
+  try {
+    const payload = await fetchPaperJson("/v1/private/paper/launch", {
+      method: "POST",
+      headers: paperTransportHeaders({ includeCsrf: true, requestId }),
+      body: JSON.stringify({
+        contract_version: "APEX-PAPER-LAUNCH-REQUEST-v1",
+        request_id: requestId,
+        operation: "start_paper_cycle",
+        mode: "paper",
+        max_candidates: 1,
+        confirmation_policy: "telegram_explicit",
+      }),
+    });
+    state.paperCycle = payload;
+    renderPaperCycle();
+    if (payload.launch_id) await pollPaperCycle(payload.launch_id);
+  } catch (error) {
+    const payload = error?.payload || {};
+    state.paperCycle = {
+      status: "BLOCKED",
+      status_reason: String(payload.error?.code || payload.reason || "Paper launch failed closed").trim(),
+      request_id: requestId,
+    };
+  } finally {
+    state.paperCyclePolling = false;
+    renderPaperCycle();
+  }
 }
 
 function setWorkspaceView(view) {
@@ -2179,6 +2341,7 @@ function adjustZoom(delta) {
 
 function bindUi() {
   dom.tickerSelect.addEventListener("change", () => loadTicker(dom.tickerSelect.value));
+  dom.startPaperCycle?.addEventListener("click", () => { startPaperCycle(); });
   $("#refresh-button").addEventListener("click", async () => {
     const button = $("#refresh-button");
     button.disabled = true;
@@ -2278,6 +2441,7 @@ async function boot() {
   bindUi();
   await loadManifest();
   await loadPaperStatus();
+  await loadPaperTransportSession();
   await loadTicker(state.ticker);
 }
 

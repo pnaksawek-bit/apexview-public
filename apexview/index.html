@@ -63,6 +63,21 @@
           <span class="overview-metric-value"><strong class="mode-value">Paper only</strong></span>
           <span class="overview-metric-note" id="operating-mode-note">ดูหลักฐานและแผน · ไม่มีการส่งคำสั่งจากหน้านี้</span>
         </div>
+        <section class="paper-cycle-panel" id="paper-cycle-panel" aria-label="Paper cycle control">
+          <div class="paper-cycle-heading">
+            <span class="overview-metric-top"><span><i data-lucide="play"></i> Paper cycle</span><span class="paper-cycle-boundary">TELEGRAM CONFIRMATION</span></span>
+            <strong>เริ่มรอบ Paper จากหน้าเดียว</strong>
+            <p>ใช้ candidate และบัญชีจำลองภายในชุดเดียวกัน · ไม่มี broker order</p>
+          </div>
+          <div class="paper-cycle-state" aria-live="polite">
+            <span class="paper-cycle-status" id="paper-cycle-status" data-state="BLOCKED">BLOCKED</span>
+            <span class="paper-cycle-reason" id="paper-cycle-reason">กำลังตรวจ private Paper runtime</span>
+            <small class="paper-cycle-launch" id="paper-cycle-launch"></small>
+          </div>
+          <button class="paper-cycle-button" id="start-paper-cycle" type="button" disabled>
+            <i data-lucide="play"></i><span>เริ่มรอบ Paper</span>
+          </button>
+        </section>
       </section>
 
       <main class="workspace" id="workspace" data-workspace-view="galaxy" tabindex="-1">
